@@ -1,0 +1,110 @@
+.gantt-chart {
+  display: grid;
+  grid-template-columns: 150px 1fr; /* Column for names, column for chart */
+  overflow-x: auto;
+  border: 1px solid #e0e0e0;
+  font-family: sans-serif;
+}
+
+.gantt-header, .gantt-row {
+  display: contents; /* Makes the children of this element behave as direct children of the grid */
+}
+
+.gantt-row-header {
+  padding: 10px;
+  font-weight: bold;
+  background-color: #f8f9fa;
+  border-right: 1px solid #e0e0e0;
+  border-bottom: 1px solid #e0e0e0;
+  position: sticky;
+  left: 0;
+  cursor: pointer;
+}
+
+.gantt-row-header:hover {
+    background-color: #e9ecef;
+}
+
+.gantt-timeline {
+  display: grid;
+  grid-auto-flow: column;
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.gantt-month {
+  padding: 10px;
+  text-align: center;
+  border-right: 1px solid #e0e0e0;
+  min-width: 100px; /* Each month has a minimum width */
+  font-size: 0.8em;
+  color: #6c757d;
+}
+
+.gantt-bars {
+  position: relative; /* For positioning the bars */
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(1px, 1fr));
+  border-right: 1px solid #e0e0e0;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.gantt-bar {
+  position: absolute;
+  height: 25px;
+  top: 50%;
+  transform: translateY(-50%);
+  background-color: #0d6efd;
+  border-radius: 5px;
+  color: white;
+  font-size: 0.8em;
+  padding: 0 5px;
+  line-height: 25px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gantt-controls {
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.gantt-timeline-header {
+  padding: 5px;
+  text-align: center;
+  border-right: 1px solid #e0e0e0;
+  font-size: 0.8em;
+  color: #6c757d;
+  position: relative;
+}
+
+.gantt-month {
+  min-width: 120px;
+  font-weight: bold;
+}
+
+.gantt-week {
+  min-width: 150px;
+  font-size: 0.75em;
+}
+
+.gantt-day {
+  min-.width: 40px;
+  font-size: 0.7em;
+}
+
+.gantt-month-label {
+    position: absolute;
+    top: -20px;
+    left: 0;
+    width: 100%;
+    text-align: center;
+    font-weight: bold;
+    font-size: 0.9em;
+    color: #343a40;
+}
+
+.gantt-bar-label {
+  padding-left: 5px;
+}

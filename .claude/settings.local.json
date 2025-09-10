@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go build:*)",
+      "Bash(tasklist)",
+      "Bash(curl:*)",
+      "Bash(netstat:*)",
+      "Bash(npm start)",
+      "Bash(go run:*)",
+      "Bash(taskkill:*)",
+      "Bash(go get:*)",
+      "Bash(set DB_HOST=localhost)",
+      "Bash(set DB_PORT=5432)",
+      "Bash(set DB_USER=postgres)",
+      "Bash(set DB_PASSWORD=postgres)",
+      "Bash(set DB_NAME=srd_calendar)",
+      "Bash(set DB_NAME=test_db)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
