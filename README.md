@@ -1,6 +1,6 @@
-# SRD Calendar Project
+# Event Calendar Project
 
-A web-based exercise tracking and management system for AOC (Army Operations Center) with a Gantt chart visualization, team status tracking, and AI-powered chatbot interface.
+A web-based exercise tracking and management system for AOC (Air Operations Center) with a Gantt chart visualization, team status tracking, and AI-powered chatbot interface.
 
 ## Features
 
@@ -158,11 +158,3 @@ Backend environment variables (in `backend/.env`):
 3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
-
-## License
-
-This project is licensed under the MIT License.
-
-## Contact
-
-Project Link: [https://github.com/yourusername/srd-calendar-project](https://github.com/yourusername/srd-calendar-project)
