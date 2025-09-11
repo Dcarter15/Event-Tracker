@@ -36,8 +36,8 @@ A web-based exercise tracking and management system for AOC (Air Operations Cent
 
 1. **Clone the repository**
 ```bash
-git clone https://github.com/yourusername/srd-calendar-project.git
-cd srd-calendar-project
+git clone [https://github.com/yourusername/srd-calendar-project.git](https://github.com/Dcarter15/Event-Tracker.git)
+cd event-tracker
 ```
 
 2. **Set up the database**
@@ -48,7 +48,7 @@ cd srd-calendar-project
 DB_HOST=localhost
 DB_PORT=5432
 DB_USER=postgres
-DB_PASSWORD=postgres
+DB_PASSWORD=YOUR_PASSWORD
 DB_NAME=test_db
 ```
 
