@@ -91,6 +91,7 @@ func createTables() error {
 			start_date TIMESTAMP NOT NULL,
 			end_date TIMESTAMP NOT NULL,
 			description TEXT,
+			exercise_event_poc VARCHAR(255),
 			aoc_involvement VARCHAR(255),
 			srd_poc VARCHAR(255),
 			cpd_poc VARCHAR(255),
@@ -107,6 +108,7 @@ func createTables() error {
 			id SERIAL PRIMARY KEY,
 			exercise_id INTEGER REFERENCES exercises(id) ON DELETE CASCADE,
 			name VARCHAR(255) NOT NULL,
+			learning_objectives TEXT,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)`,
 		`CREATE TABLE IF NOT EXISTS teams (
@@ -147,6 +149,34 @@ func createTables() error {
 			// Log index creation errors but don't fail
 			log.Printf("Warning: failed to create index: %v", err)
 		}
+	}
+
+	// Add exercise_event_poc column if it doesn't exist
+	_, err := DB.Exec(`
+		DO $$ 
+		BEGIN
+			IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+				WHERE table_name = 'exercises' AND column_name = 'exercise_event_poc') THEN
+				ALTER TABLE exercises ADD COLUMN exercise_event_poc VARCHAR(255);
+			END IF;
+		END $$;
+	`)
+	if err != nil {
+		log.Printf("Warning: failed to add exercise_event_poc column: %v", err)
+	}
+
+	// Add learning_objectives column to divisions if it doesn't exist
+	_, err = DB.Exec(`
+		DO $$ 
+		BEGIN
+			IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+				WHERE table_name = 'divisions' AND column_name = 'learning_objectives') THEN
+				ALTER TABLE divisions ADD COLUMN learning_objectives TEXT;
+			END IF;
+		END $$;
+	`)
+	if err != nil {
+		log.Printf("Warning: failed to add learning_objectives column: %v", err)
 	}
 
 	log.Println("Database schema created/verified successfully")

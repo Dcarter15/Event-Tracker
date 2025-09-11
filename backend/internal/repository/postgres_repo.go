@@ -24,7 +24,7 @@ func NewPostgresRepository() *PostgresRepository {
 func (r *PostgresRepository) GetAllExercisesDB() []models.Exercise {
 	query := `
 		SELECT id, name, start_date, end_date, description, 
-		       COALESCE(aoc_involvement, ''), COALESCE(srd_poc, ''), COALESCE(cpd_poc, '')
+		       COALESCE(exercise_event_poc, ''), COALESCE(aoc_involvement, ''), COALESCE(srd_poc, ''), COALESCE(cpd_poc, '')
 		FROM exercises
 		ORDER BY start_date
 	`
@@ -39,16 +39,17 @@ func (r *PostgresRepository) GetAllExercisesDB() []models.Exercise {
 	var exercises []models.Exercise
 	for rows.Next() {
 		var ex models.Exercise
-		var desc, aoc, srdPoc, cpdPoc sql.NullString
+		var desc, eventPoc, aoc, srdPoc, cpdPoc sql.NullString
 		
 		err := rows.Scan(&ex.ID, &ex.Name, &ex.StartDate, &ex.EndDate, 
-			&desc, &aoc, &srdPoc, &cpdPoc)
+			&desc, &eventPoc, &aoc, &srdPoc, &cpdPoc)
 		if err != nil {
 			log.Printf("Error scanning exercise: %v", err)
 			continue
 		}
 
 		ex.Description = desc.String
+		ex.ExerciseEventPOC = eventPoc.String
 		ex.AOCInvolvement = aoc.String
 		ex.SRDPOC = srdPoc.String
 		ex.CPDPOC = cpdPoc.String
@@ -68,17 +69,17 @@ func (r *PostgresRepository) GetAllExercisesDB() []models.Exercise {
 // GetExerciseByIDDB returns a single exercise by ID from the database
 func (r *PostgresRepository) GetExerciseByIDDB(id int) (models.Exercise, bool) {
 	var ex models.Exercise
-	var desc, aoc, srdPoc, cpdPoc sql.NullString
+	var desc, eventPoc, aoc, srdPoc, cpdPoc sql.NullString
 
 	query := `
 		SELECT id, name, start_date, end_date, description, 
-		       COALESCE(aoc_involvement, ''), COALESCE(srd_poc, ''), COALESCE(cpd_poc, '')
+		       COALESCE(exercise_event_poc, ''), COALESCE(aoc_involvement, ''), COALESCE(srd_poc, ''), COALESCE(cpd_poc, '')
 		FROM exercises
 		WHERE id = $1
 	`
 
 	err := r.db.QueryRow(query, id).Scan(&ex.ID, &ex.Name, &ex.StartDate, &ex.EndDate,
-		&desc, &aoc, &srdPoc, &cpdPoc)
+		&desc, &eventPoc, &aoc, &srdPoc, &cpdPoc)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return ex, false
@@ -88,6 +89,7 @@ func (r *PostgresRepository) GetExerciseByIDDB(id int) (models.Exercise, bool) {
 	}
 
 	ex.Description = desc.String
+	ex.ExerciseEventPOC = eventPoc.String
 	ex.AOCInvolvement = aoc.String
 	ex.SRDPOC = srdPoc.String
 	ex.CPDPOC = cpdPoc.String
@@ -112,13 +114,13 @@ func (r *PostgresRepository) CreateExerciseDB(exercise models.Exercise) models.E
 
 	// Insert exercise
 	query := `
-		INSERT INTO exercises (name, start_date, end_date, description, aoc_involvement, srd_poc, cpd_poc)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO exercises (name, start_date, end_date, description, exercise_event_poc, aoc_involvement, srd_poc, cpd_poc)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id
 	`
 
 	err = tx.QueryRow(query, exercise.Name, exercise.StartDate, exercise.EndDate,
-		exercise.Description, exercise.AOCInvolvement, exercise.SRDPOC, exercise.CPDPOC).Scan(&exercise.ID)
+		exercise.Description, exercise.ExerciseEventPOC, exercise.AOCInvolvement, exercise.SRDPOC, exercise.CPDPOC).Scan(&exercise.ID)
 	if err != nil {
 		log.Printf("Error creating exercise: %v", err)
 		return exercise
@@ -163,12 +165,12 @@ func (r *PostgresRepository) UpdateExerciseDB(exercise models.Exercise) bool {
 	query := `
 		UPDATE exercises 
 		SET name = $2, start_date = $3, end_date = $4, description = $5, 
-		    aoc_involvement = $6, srd_poc = $7, cpd_poc = $8, updated_at = CURRENT_TIMESTAMP
+		    exercise_event_poc = $6, aoc_involvement = $7, srd_poc = $8, cpd_poc = $9, updated_at = CURRENT_TIMESTAMP
 		WHERE id = $1
 	`
 
 	result, err := tx.Exec(query, exercise.ID, exercise.Name, exercise.StartDate, exercise.EndDate,
-		exercise.Description, exercise.AOCInvolvement, exercise.SRDPOC, exercise.CPDPOC)
+		exercise.Description, exercise.ExerciseEventPOC, exercise.AOCInvolvement, exercise.SRDPOC, exercise.CPDPOC)
 	if err != nil {
 		log.Printf("Error updating exercise: %v", err)
 		return false
@@ -226,7 +228,7 @@ func (r *PostgresRepository) DeleteExerciseDB(id int) bool {
 // GetDivisionsForExercise gets all divisions for an exercise
 func (r *PostgresRepository) GetDivisionsForExercise(exerciseID int) []models.Division {
 	query := `
-		SELECT id, name
+		SELECT id, name, COALESCE(learning_objectives, '')
 		FROM divisions
 		WHERE exercise_id = $1
 		ORDER BY id
@@ -242,13 +244,16 @@ func (r *PostgresRepository) GetDivisionsForExercise(exerciseID int) []models.Di
 	var divisions []models.Division
 	for rows.Next() {
 		var div models.Division
+		var learningObjectives sql.NullString
 		div.ExerciseID = exerciseID
 		
-		err := rows.Scan(&div.ID, &div.Name)
+		err := rows.Scan(&div.ID, &div.Name, &learningObjectives)
 		if err != nil {
 			log.Printf("Error scanning division: %v", err)
 			continue
 		}
+		
+		div.LearningObjectives = learningObjectives.String
 
 		// Load teams for this division
 		div.Teams = r.GetTeamsForDivision(exerciseID, div.ID)
@@ -389,6 +394,24 @@ func (r *PostgresRepository) createDivision(tx *sql.Tx, exerciseID int, division
 	}
 
 	return division
+}
+
+// UpdateDivisionDB updates a division's information including learning objectives
+func (r *PostgresRepository) UpdateDivisionDB(division models.Division) bool {
+	query := `
+		UPDATE divisions 
+		SET name = $2, learning_objectives = $3
+		WHERE id = $1
+	`
+
+	result, err := r.db.Exec(query, division.ID, division.Name, division.LearningObjectives)
+	if err != nil {
+		log.Printf("Error updating division: %v", err)
+		return false
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	return rowsAffected > 0
 }
 
 // updateTeam updates a team in the database

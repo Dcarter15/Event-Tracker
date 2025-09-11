@@ -107,6 +107,30 @@ func GetDivisionsForExercise(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(exercise.Divisions)
 }
 
+// UpdateDivision updates a division's information including learning objectives
+func UpdateDivision(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var division models.Division
+	err := json.NewDecoder(r.Body).Decode(&division)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Update the division in the repository
+	if repository.UpdateDivision(division) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(division)
+	} else {
+		http.Error(w, "Failed to update division", http.StatusInternalServerError)
+	}
+}
+
 // UpdateTeam updates a team within a specific exercise
 func UpdateTeam(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut {

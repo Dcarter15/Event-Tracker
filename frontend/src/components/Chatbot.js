@@ -52,9 +52,53 @@ const Chatbot = () => {
     const userMessage = { sender: 'user', text: inputValue };
     setMessages(prevMessages => [...prevMessages, userMessage]);
 
+    const userInput = inputValue.toLowerCase();
     const botReply = await sendMessageToBackend(inputValue);
     const botResponse = { sender: 'bot', text: botReply };
     setMessages(prevMessages => [...prevMessages, botResponse]);
+
+    // Check if the operation was successful and requires a page refresh
+    const successIndicators = [
+      'successfully added',
+      'successfully created',
+      'successfully updated',
+      'successfully modified',
+      'successfully deleted',
+      'successfully removed',
+      'has been added',
+      'has been created',
+      'has been updated',
+      'has been modified',
+      'has been deleted',
+      'has been removed',
+      'exercise added',
+      'exercise created',
+      'exercise updated',
+      'exercise deleted'
+    ];
+
+    const needsRefresh = 
+      (userInput.includes('add') || userInput.includes('create') || 
+       userInput.includes('update') || userInput.includes('modify') || 
+       userInput.includes('delete') || userInput.includes('remove')) &&
+      (userInput.includes('exercise')) &&
+      successIndicators.some(indicator => botReply.toLowerCase().includes(indicator));
+
+    if (needsRefresh) {
+      // Add a notification that the page will refresh
+      const refreshNotice = { 
+        sender: 'bot', 
+        text: '🔄 Refreshing the page to show your changes...' 
+      };
+      setTimeout(() => {
+        setMessages(prevMessages => [...prevMessages, refreshNotice]);
+      }, 500);
+      
+      // Wait a moment for the user to see the success message, then refresh
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+    }
 
     setInputValue('');
   };

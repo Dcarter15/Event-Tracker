@@ -19,14 +19,27 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
   const [divisions, setDivisions] = useState([]);
   const [editingTeam, setEditingTeam] = useState(null);
   const [editValues, setEditValues] = useState({});
+  const [editingDescription, setEditingDescription] = useState(false);
+  const [descriptionValue, setDescriptionValue] = useState('');
+  const [editingDivisionLearning, setEditingDivisionLearning] = useState({});
+  const [learningValues, setLearningValues] = useState({});
 
   useEffect(() => {
     if (exercise && show) {
+      // Set initial description value
+      setDescriptionValue(exercise.description || '');
+      
       // Fetch divisions specific to this exercise
       fetch(`/api/divisions?exercise_id=${exercise.id}`)
         .then(response => response.json())
         .then(data => {
           setDivisions(data || []);
+          // Initialize learning objectives values
+          const initialLearning = {};
+          (data || []).forEach(div => {
+            initialLearning[div.id] = div.learning_objectives || '';
+          });
+          setLearningValues(initialLearning);
         })
         .catch(error => {
           console.error('Error fetching divisions:', error);
@@ -106,6 +119,66 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
     setEditValues(prev => ({ ...prev, [field]: value }));
   };
 
+  const saveDescription = () => {
+    const updatedExercise = {
+      ...exercise,
+      description: descriptionValue
+    };
+
+    fetch(`/api/exercises/${exercise.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(updatedExercise),
+    })
+    .then(response => {
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+      setEditingDescription(false);
+      exercise.description = descriptionValue;
+    })
+    .catch(error => {
+      console.error('Error updating description:', error);
+      alert('Failed to update description. Please try again.');
+    });
+  };
+
+  const saveLearningObjectives = (divisionId) => {
+    const division = divisions.find(d => d.id === divisionId);
+    const updatedDivision = {
+      ...division,
+      learning_objectives: learningValues[divisionId]
+    };
+
+    fetch(`/api/divisions/update`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(updatedDivision),
+    })
+    .then(response => {
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+      setEditingDivisionLearning({ ...editingDivisionLearning, [divisionId]: false });
+      // Update local state
+      const updatedDivisions = divisions.map(div => {
+        if (div.id === divisionId) {
+          return { ...div, learning_objectives: learningValues[divisionId] };
+        }
+        return div;
+      });
+      setDivisions(updatedDivisions);
+    })
+    .catch(error => {
+      console.error('Error updating learning objectives:', error);
+      alert('Failed to update learning objectives. Please try again.');
+    });
+  };
+
   if (!exercise) return null;
 
   return (
@@ -114,12 +187,39 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
         <Modal.Title>{exercise.name}</Modal.Title>
       </Modal.Header>
       <Modal.Body>
-        {exercise.description && (
-          <div className="mb-3">
+        <div className="mb-3">
+          <div className="d-flex justify-content-between align-items-center mb-2">
             <h5>Exercise Description</h5>
-            <p>{exercise.description}</p>
+            {!editingDescription ? (
+              <Button variant="outline-primary" size="sm" onClick={() => setEditingDescription(true)}>
+                Edit
+              </Button>
+            ) : (
+              <div>
+                <Button variant="success" size="sm" className="me-2" onClick={saveDescription}>
+                  Save
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => {
+                  setEditingDescription(false);
+                  setDescriptionValue(exercise.description || '');
+                }}>
+                  Cancel
+                </Button>
+              </div>
+            )}
           </div>
-        )}
+          {!editingDescription ? (
+            <p>{exercise.description || 'No description provided'}</p>
+          ) : (
+            <Form.Control
+              as="textarea"
+              rows={3}
+              value={descriptionValue}
+              onChange={(e) => setDescriptionValue(e.target.value)}
+              placeholder="Enter exercise description"
+            />
+          )}
+        </div>
         
         {(exercise.srd_poc || exercise.cpd_poc) && (
           <div className="mb-3">
@@ -158,6 +258,54 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
                   {division.name}
                 </Accordion.Header>
                 <Accordion.Body>
+                  {/* Learning Objectives Section */}
+                  <div className="mb-4 p-3 bg-light rounded">
+                    <div className="d-flex justify-content-between align-items-center mb-2">
+                      <h6>Division Learning Objectives</h6>
+                      {!editingDivisionLearning[division.id] ? (
+                        <Button 
+                          variant="outline-primary" 
+                          size="sm"
+                          onClick={() => setEditingDivisionLearning({ ...editingDivisionLearning, [division.id]: true })}
+                        >
+                          Edit
+                        </Button>
+                      ) : (
+                        <div>
+                          <Button 
+                            variant="success" 
+                            size="sm"
+                            className="me-2"
+                            onClick={() => saveLearningObjectives(division.id)}
+                          >
+                            Save
+                          </Button>
+                          <Button 
+                            variant="secondary" 
+                            size="sm"
+                            onClick={() => {
+                              setEditingDivisionLearning({ ...editingDivisionLearning, [division.id]: false });
+                              setLearningValues({ ...learningValues, [division.id]: division.learning_objectives || '' });
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                    {!editingDivisionLearning[division.id] ? (
+                      <p className="mb-0">{division.learning_objectives || 'No learning objectives defined'}</p>
+                    ) : (
+                      <Form.Control
+                        as="textarea"
+                        rows={3}
+                        value={learningValues[division.id] || ''}
+                        onChange={(e) => setLearningValues({ ...learningValues, [division.id]: e.target.value })}
+                        placeholder="Enter learning objectives for this division"
+                      />
+                    )}
+                  </div>
+                  {/* Teams Section */}
                   {division.teams?.map(team => {
                     const isEditing = editingTeam === team.id;
                     return (

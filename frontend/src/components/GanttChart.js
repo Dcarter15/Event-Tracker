@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './GanttChart.css';
 import {
   eachMonthOfInterval,
@@ -16,6 +16,17 @@ import { Button, ButtonGroup, OverlayTrigger, Tooltip } from 'react-bootstrap';
 
 const GanttChart = ({ exercises, onExerciseClick }) => {
   const [viewMode, setViewMode] = useState('month'); // 'month', 'week', 'day'
+  const [editingPOC, setEditingPOC] = useState({});
+  const [pocValues, setPocValues] = useState({});
+
+  // Initialize POC values from exercises
+  useEffect(() => {
+    const initialPocValues = {};
+    exercises.forEach(exercise => {
+      initialPocValues[exercise.id] = exercise.exercise_event_poc || '';
+    });
+    setPocValues(initialPocValues);
+  }, [exercises]);
 
   // --- Date and Timeline Calculations ---
   let chartStartDate, chartEndDate, timelineHeaders;
@@ -64,6 +75,46 @@ const GanttChart = ({ exercises, onExerciseClick }) => {
     return null;
   }
 
+  const handlePOCEdit = (exerciseId) => {
+    setEditingPOC({ ...editingPOC, [exerciseId]: true });
+  };
+
+  const handlePOCChange = (exerciseId, value) => {
+    setPocValues({ ...pocValues, [exerciseId]: value });
+  };
+
+  const handlePOCSave = async (exerciseId) => {
+    try {
+      const exercise = exercises.find(ex => ex.id === exerciseId);
+      const updatedExercise = {
+        ...exercise,
+        exercise_event_poc: pocValues[exerciseId]
+      };
+
+      const response = await fetch(`/api/exercises/${exerciseId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatedExercise),
+      });
+
+      if (response.ok) {
+        setEditingPOC({ ...editingPOC, [exerciseId]: false });
+      } else {
+        console.error('Failed to update exercise POC');
+      }
+    } catch (error) {
+      console.error('Error updating exercise POC:', error);
+    }
+  };
+
+  const handlePOCCancel = (exerciseId) => {
+    const exercise = exercises.find(ex => ex.id === exerciseId);
+    setPocValues({ ...pocValues, [exerciseId]: exercise.exercise_event_poc || '' });
+    setEditingPOC({ ...editingPOC, [exerciseId]: false });
+  };
+
   return (
     <div>
       <div className="gantt-controls mb-3">
@@ -77,6 +128,7 @@ const GanttChart = ({ exercises, onExerciseClick }) => {
       <div className="gantt-chart">
         {/* Header */}
         <div className="gantt-header">
+          <div className="gantt-poc-header">Exercise Event POC</div>
           <div className="gantt-row-header">Exercise</div>
           <div className="gantt-timeline" style={{ gridTemplateColumns: `repeat(${timelineHeaders.length}, 1fr)` }}>
             {timelineHeaders.map(headerDate => (
@@ -108,6 +160,25 @@ const GanttChart = ({ exercises, onExerciseClick }) => {
 
           return (
             <div className="gantt-row" key={exercise.id}>
+              <div className="gantt-poc-cell">
+                {editingPOC[exercise.id] ? (
+                  <div className="poc-edit-container">
+                    <input
+                      type="text"
+                      value={pocValues[exercise.id] || ''}
+                      onChange={(e) => handlePOCChange(exercise.id, e.target.value)}
+                      className="poc-input"
+                      autoFocus
+                    />
+                    <button onClick={() => handlePOCSave(exercise.id)} className="poc-save-btn">✓</button>
+                    <button onClick={() => handlePOCCancel(exercise.id)} className="poc-cancel-btn">✗</button>
+                  </div>
+                ) : (
+                  <div className="poc-display" onClick={() => handlePOCEdit(exercise.id)}>
+                    {pocValues[exercise.id] || <span className="poc-placeholder">Click to add</span>}
+                  </div>
+                )}
+              </div>
               <div className="gantt-row-header" onClick={() => onExerciseClick(exercise)}>
                 {exercise.name}
               </div>

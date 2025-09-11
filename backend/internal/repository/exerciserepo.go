@@ -58,3 +58,12 @@ func DeleteExercise(id int) bool {
 	}
 	return repo.DeleteExerciseDB(id)
 }
+
+// UpdateDivision updates a division's information including learning objectives
+func UpdateDivision(division models.Division) bool {
+	if repo == nil {
+		log.Println("Repository not initialized")
+		return false
+	}
+	return repo.UpdateDivisionDB(division)
+}

@@ -1,6 +1,6 @@
 .gantt-chart {
   display: grid;
-  grid-template-columns: 150px 1fr; /* Column for names, column for chart */
+  grid-template-columns: 200px 150px 1fr; /* Column for POC, names, chart */
   overflow-x: auto;
   border: 1px solid #e0e0e0;
   font-family: sans-serif;
@@ -17,8 +17,9 @@
   border-right: 1px solid #e0e0e0;
   border-bottom: 1px solid #e0e0e0;
   position: sticky;
-  left: 0;
+  left: 200px;
   cursor: pointer;
+  z-index: 1;
 }
 
 .gantt-row-header:hover {
@@ -107,4 +108,81 @@
 
 .gantt-bar-label {
   padding-left: 5px;
+}
+
+.gantt-poc-header {
+  padding: 10px;
+  font-weight: bold;
+  background-color: #f8f9fa;
+  border-right: 1px solid #e0e0e0;
+  border-bottom: 1px solid #e0e0e0;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+}
+
+.gantt-poc-cell {
+  padding: 10px;
+  background-color: white;
+  border-right: 1px solid #e0e0e0;
+  border-bottom: 1px solid #e0e0e0;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+}
+
+.poc-display {
+  cursor: pointer;
+  min-height: 20px;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+.poc-display:hover {
+  background-color: #f0f0f0;
+}
+
+.poc-placeholder {
+  color: #999;
+  font-style: italic;
+}
+
+.poc-edit-container {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.poc-input {
+  flex: 1;
+  padding: 4px;
+  border: 1px solid #0d6efd;
+  border-radius: 3px;
+  font-size: 14px;
+}
+
+.poc-save-btn, .poc-cancel-btn {
+  padding: 2px 6px;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.poc-save-btn {
+  background-color: #28a745;
+  color: white;
+}
+
+.poc-save-btn:hover {
+  background-color: #218838;
+}
+
+.poc-cancel-btn {
+  background-color: #dc3545;
+  color: white;
+}
+
+.poc-cancel-btn:hover {
+  background-color: #c82333;
 }
