@@ -396,6 +396,25 @@ func (r *PostgresRepository) createDivision(tx *sql.Tx, exerciseID int, division
 	return division
 }
 
+// CreateDivisionDB creates a new division in the database
+func (r *PostgresRepository) CreateDivisionDB(division models.Division) models.Division {
+	query := `
+		INSERT INTO divisions (exercise_id, name, learning_objectives)
+		VALUES ($1, $2, $3)
+		RETURNING id
+	`
+
+	err := r.db.QueryRow(query, division.ExerciseID, division.Name, division.LearningObjectives).Scan(&division.ID)
+	if err != nil {
+		log.Printf("Error creating division: %v", err)
+		return division
+	}
+
+	// Initialize empty teams slice
+	division.Teams = []models.Team{}
+	return division
+}
+
 // UpdateDivisionDB updates a division's information including learning objectives
 func (r *PostgresRepository) UpdateDivisionDB(division models.Division) bool {
 	query := `
@@ -412,6 +431,28 @@ func (r *PostgresRepository) UpdateDivisionDB(division models.Division) bool {
 
 	rowsAffected, _ := result.RowsAffected()
 	return rowsAffected > 0
+}
+
+// CreateTeamDB creates a new team in the database
+func (r *PostgresRepository) CreateTeamDB(team models.Team) models.Team {
+	query := `
+		INSERT INTO teams (exercise_id, division_id, name, poc, status, comments)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING id
+	`
+
+	// Set default status if empty
+	if team.Status == "" {
+		team.Status = "green"
+	}
+
+	err := r.db.QueryRow(query, team.ExerciseID, team.DivisionID, team.Name, team.POC, team.Status, team.Comments).Scan(&team.ID)
+	if err != nil {
+		log.Printf("Error creating team: %v", err)
+		return team
+	}
+
+	return team
 }
 
 // updateTeam updates a team in the database

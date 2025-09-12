@@ -59,6 +59,15 @@ func DeleteExercise(id int) bool {
 	return repo.DeleteExerciseDB(id)
 }
 
+// CreateDivision creates a new division for an exercise
+func CreateDivision(division models.Division) models.Division {
+	if repo == nil {
+		log.Println("Repository not initialized")
+		return division
+	}
+	return repo.CreateDivisionDB(division)
+}
+
 // UpdateDivision updates a division's information including learning objectives
 func UpdateDivision(division models.Division) bool {
 	if repo == nil {
@@ -66,4 +75,13 @@ func UpdateDivision(division models.Division) bool {
 		return false
 	}
 	return repo.UpdateDivisionDB(division)
+}
+
+// CreateTeam creates a new team within a division
+func CreateTeam(team models.Team) models.Team {
+	if repo == nil {
+		log.Println("Repository not initialized")
+		return team
+	}
+	return repo.CreateTeamDB(team)
 }

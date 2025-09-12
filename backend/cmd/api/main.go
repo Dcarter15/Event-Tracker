@@ -35,7 +35,9 @@ func main() {
 	r.Delete("/api/exercises/{id}", handlers.DeleteExerciseHandler)
 
 	r.Get("/api/divisions", handlers.GetDivisionsForExercise)
+	r.Post("/api/divisions", handlers.CreateDivision)
 	r.Put("/api/divisions/update", handlers.UpdateDivision)
+	r.Post("/api/teams", handlers.CreateTeam)
 	r.Put("/api/team/update", handlers.UpdateTeam)
 
 	// Chatbot endpoint

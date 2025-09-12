@@ -23,6 +23,10 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
   const [descriptionValue, setDescriptionValue] = useState('');
   const [editingDivisionLearning, setEditingDivisionLearning] = useState({});
   const [learningValues, setLearningValues] = useState({});
+  const [showAddDivision, setShowAddDivision] = useState(false);
+  const [newDivisionName, setNewDivisionName] = useState('');
+  const [showAddTeam, setShowAddTeam] = useState({});
+  const [newTeamName, setNewTeamName] = useState('');
 
   useEffect(() => {
     if (exercise && show) {
@@ -179,6 +183,91 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
     });
   };
 
+  const addDivision = async () => {
+    if (!newDivisionName.trim()) {
+      alert('Please enter a division name');
+      return;
+    }
+
+    const newDivision = {
+      exercise_id: exercise.id,
+      name: newDivisionName,
+      learning_objectives: ''
+    };
+
+    try {
+      const response = await fetch('/api/divisions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newDivision),
+      });
+
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+
+      const createdDivision = await response.json();
+      setDivisions([...divisions, createdDivision]);
+      setNewDivisionName('');
+      setShowAddDivision(false);
+    } catch (error) {
+      console.error('Error adding division:', error);
+      alert('Failed to add division. Please try again.');
+    }
+  };
+
+  const addTeam = async (divisionId) => {
+    if (!newTeamName.trim()) {
+      alert('Please enter a team name');
+      return;
+    }
+
+    const newTeam = {
+      exercise_id: exercise.id,
+      division_id: divisionId,
+      name: newTeamName,
+      poc: '',
+      status: 'green',
+      comments: ''
+    };
+
+    try {
+      const response = await fetch('/api/teams', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newTeam),
+      });
+
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+
+      const createdTeam = await response.json();
+      
+      // Update divisions state to include the new team
+      const updatedDivisions = divisions.map(div => {
+        if (div.id === divisionId) {
+          return {
+            ...div,
+            teams: [...(div.teams || []), createdTeam]
+          };
+        }
+        return div;
+      });
+      
+      setDivisions(updatedDivisions);
+      setNewTeamName('');
+      setShowAddTeam({ ...showAddTeam, [divisionId]: false });
+    } catch (error) {
+      console.error('Error adding team:', error);
+      alert('Failed to add team. Please try again.');
+    }
+  };
+
   if (!exercise) return null;
 
   return (
@@ -247,7 +336,42 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
           </div>
         )}
         
-        <h5>Participating Divisions</h5>
+        <div className="d-flex justify-content-between align-items-center mb-3">
+          <h5>Participating Divisions</h5>
+          <Button 
+            variant="success" 
+            size="sm"
+            onClick={() => setShowAddDivision(true)}
+          >
+            + Add Division
+          </Button>
+        </div>
+        
+        {/* Add Division Form */}
+        {showAddDivision && (
+          <div className="mb-3 p-3 border rounded bg-light">
+            <h6>Add New Division</h6>
+            <div className="d-flex gap-2">
+              <Form.Control
+                type="text"
+                placeholder="Enter division name"
+                value={newDivisionName}
+                onChange={(e) => setNewDivisionName(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && addDivision()}
+              />
+              <Button variant="success" onClick={addDivision}>
+                Add
+              </Button>
+              <Button variant="secondary" onClick={() => {
+                setShowAddDivision(false);
+                setNewDivisionName('');
+              }}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+        
         <Accordion alwaysOpen>
           {divisions.map((division, index) => {
             const divisionColor = getDivisionColor(division.teams);
@@ -306,6 +430,41 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
                     )}
                   </div>
                   {/* Teams Section */}
+                  <div className="d-flex justify-content-between align-items-center mb-3">
+                    <h6>Teams</h6>
+                    <Button 
+                      variant="outline-success" 
+                      size="sm"
+                      onClick={() => setShowAddTeam({ ...showAddTeam, [division.id]: true })}
+                    >
+                      + Add Team
+                    </Button>
+                  </div>
+                  
+                  {/* Add Team Form */}
+                  {showAddTeam[division.id] && (
+                    <div className="mb-3 p-2 border rounded">
+                      <div className="d-flex gap-2">
+                        <Form.Control
+                          type="text"
+                          placeholder="Enter team name"
+                          value={newTeamName}
+                          onChange={(e) => setNewTeamName(e.target.value)}
+                          onKeyPress={(e) => e.key === 'Enter' && addTeam(division.id)}
+                        />
+                        <Button variant="success" size="sm" onClick={() => addTeam(division.id)}>
+                          Add
+                        </Button>
+                        <Button variant="secondary" size="sm" onClick={() => {
+                          setShowAddTeam({ ...showAddTeam, [division.id]: false });
+                          setNewTeamName('');
+                        }}>
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                  
                   {division.teams?.map(team => {
                     const isEditing = editingTeam === team.id;
                     return (

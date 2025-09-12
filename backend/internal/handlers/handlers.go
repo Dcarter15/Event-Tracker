@@ -107,6 +107,26 @@ func GetDivisionsForExercise(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(exercise.Divisions)
 }
 
+// CreateDivision creates a new division for an exercise
+func CreateDivision(w http.ResponseWriter, r *http.Request) {
+	var division models.Division
+	err := json.NewDecoder(r.Body).Decode(&division)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	createdDivision := repository.CreateDivision(division)
+	if createdDivision.ID == 0 {
+		http.Error(w, "Failed to create division", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(createdDivision)
+}
+
 // UpdateDivision updates a division's information including learning objectives
 func UpdateDivision(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut {
@@ -129,6 +149,26 @@ func UpdateDivision(w http.ResponseWriter, r *http.Request) {
 	} else {
 		http.Error(w, "Failed to update division", http.StatusInternalServerError)
 	}
+}
+
+// CreateTeam creates a new team within a division
+func CreateTeam(w http.ResponseWriter, r *http.Request) {
+	var team models.Team
+	err := json.NewDecoder(r.Body).Decode(&team)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	createdTeam := repository.CreateTeam(team)
+	if createdTeam.ID == 0 {
+		http.Error(w, "Failed to create team", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(createdTeam)
 }
 
 // UpdateTeam updates a team within a specific exercise
