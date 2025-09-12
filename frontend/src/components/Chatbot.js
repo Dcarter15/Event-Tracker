@@ -107,7 +107,12 @@ const Chatbot = () => {
     <div className="chatbot-container">
       {isOpen ? (
         <div className="chat-window">
-          <div className="chat-header">AOC Assistant</div>
+          <div className="chat-header">
+            <span>AOC Assistant</span>
+            <button className="chat-close-btn" onClick={toggleChat}>
+              ^
+            </button>
+          </div>
           <div className="chat-messages">
             {messages.map((msg, index) => (
               <div key={index} className={`chat-message ${msg.sender}`}>
