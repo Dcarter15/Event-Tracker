@@ -183,7 +183,7 @@ const GanttChart = ({ exercises, onExerciseClick }) => {
                 {exercise.name}
               </div>
               <div className="gantt-bars">
-                {left >= 0 && width > 0 && (
+                {width > 0 && left + width > 0 && left < 100 && (
                   <OverlayTrigger
                     placement="top"
                     delay={{ show: 250, hide: 400 }}
@@ -192,8 +192,8 @@ const GanttChart = ({ exercises, onExerciseClick }) => {
                     <div
                       className="gantt-bar"
                       style={{
-                        left: `${left}%`,
-                        width: `${width}%`,
+                        left: `${Math.max(0, left)}%`,
+                        width: `${Math.min(width, 100 - Math.max(0, left))}%`,
                       }}
                     >
                       <span className="gantt-bar-label">{exercise.name}</span>

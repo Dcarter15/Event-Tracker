@@ -362,11 +362,67 @@ func (r *PostgresRepository) createDefaultDivisions(tx *sql.Tx, exerciseID int) 
 	return divisions
 }
 
+// createStandardDivisions creates the standard AOC divisions and teams structure
+func (r *PostgresRepository) createStandardDivisions() []models.Division {
+	return []models.Division{
+		{
+			Name: "COD",
+			LearningObjectives: "Learning objectives for COD division",
+			Teams: []models.Team{
+				{Name: "Team 1", POC: "Team Leader", Status: "green", Comments: "Demo team"},
+				{Name: "Team 2", POC: "Team Leader", Status: "green", Comments: "Demo team"},
+				{Name: "Team 3", POC: "Team Leader", Status: "green", Comments: "Demo team"},
+				{Name: "Team 4", POC: "Team Leader", Status: "green", Comments: "Demo team"},
+			},
+		},
+		{
+			Name: "CPD",
+			LearningObjectives: "Learning objectives for CPD division",
+			Teams: []models.Team{
+				{Name: "Team 1", POC: "Team Leader", Status: "green", Comments: "Demo team"},
+				{Name: "Team 2", POC: "Team Leader", Status: "green", Comments: "Demo team"},
+				{Name: "Team 3", POC: "Team Leader", Status: "green", Comments: "Demo team"},
+				{Name: "Team 4", POC: "Team Leader", Status: "green", Comments: "Demo team"},
+			},
+		},
+		{
+			Name: "SRD",
+			LearningObjectives: "Learning objectives for SRD division",
+			Teams: []models.Team{
+				{Name: "Team 1", POC: "Team Leader", Status: "green", Comments: "Demo team"},
+				{Name: "Team 2", POC: "Team Leader", Status: "green", Comments: "Demo team"},
+				{Name: "Team 3", POC: "Team Leader", Status: "green", Comments: "Demo team"},
+				{Name: "Team 4", POC: "Team Leader", Status: "green", Comments: "Demo team"},
+			},
+		},
+		{
+			Name: "ISRD",
+			LearningObjectives: "Learning objectives for ISRD division",
+			Teams: []models.Team{
+				{Name: "Team 1", POC: "Team Leader", Status: "green", Comments: "Demo team"},
+				{Name: "Team 2", POC: "Team Leader", Status: "green", Comments: "Demo team"},
+				{Name: "Team 3", POC: "Team Leader", Status: "green", Comments: "Demo team"},
+				{Name: "Team 4", POC: "Team Leader", Status: "green", Comments: "Demo team"},
+			},
+		},
+		{
+			Name: "AMD",
+			LearningObjectives: "Learning objectives for AMD division",
+			Teams: []models.Team{
+				{Name: "Team 1", POC: "Team Leader", Status: "green", Comments: "Demo team"},
+				{Name: "Team 2", POC: "Team Leader", Status: "green", Comments: "Demo team"},
+				{Name: "Team 3", POC: "Team Leader", Status: "green", Comments: "Demo team"},
+				{Name: "Team 4", POC: "Team Leader", Status: "green", Comments: "Demo team"},
+			},
+		},
+	}
+}
+
 // createDivision creates a division with its teams
 func (r *PostgresRepository) createDivision(tx *sql.Tx, exerciseID int, division models.Division) models.Division {
 	var divID int
-	err := tx.QueryRow("INSERT INTO divisions (exercise_id, name) VALUES ($1, $2) RETURNING id",
-		exerciseID, division.Name).Scan(&divID)
+	err := tx.QueryRow("INSERT INTO divisions (exercise_id, name, learning_objectives) VALUES ($1, $2, $3) RETURNING id",
+		exerciseID, division.Name, division.LearningObjectives).Scan(&divID)
 	if err != nil {
 		log.Printf("Error creating division: %v", err)
 		return division
@@ -492,24 +548,45 @@ func (r *PostgresRepository) InitializeDatabase() {
 
 	// If no exercises exist, create initial data
 	if count == 0 {
-		log.Println("Initializing database with sample data...")
+		log.Println("Initializing database with real exercise data...")
 		
-		exercise1 := models.Exercise{
-			Name:        "Initial Exercise 1",
-			StartDate:   time.Now(),
-			EndDate:     time.Now().AddDate(0, 0, 7),
-			Description: "First sample exercise",
+		// Create REFORPAC exercise
+		reforpac := models.Exercise{
+			Name:        "REFORPAC",
+			StartDate:   time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
+			EndDate:     time.Date(2026, 8, 16, 0, 0, 0, 0, time.UTC),
+			Description: "Reformation of the Pacific Exercise",
+			Divisions: r.createStandardDivisions(),
 		}
-		r.CreateExerciseDB(exercise1)
+		r.CreateExerciseDB(reforpac)
 
-		exercise2 := models.Exercise{
-			Name:        "Initial Exercise 2",
-			StartDate:   time.Now().AddDate(0, 0, 10),
-			EndDate:     time.Now().AddDate(0, 0, 17),
-			Description: "Second sample exercise",
+		// Create KEEN EDGE exercise  
+		keenEdgeDivisions := r.createStandardDivisions()
+		// Add some variation to KEEN EDGE
+		keenEdgeDivisions[0].Teams[0].Status = "yellow"
+		keenEdge := models.Exercise{
+			Name:        "KEEN EDGE",
+			StartDate:   time.Date(2026, 1, 7, 0, 0, 0, 0, time.UTC),
+			EndDate:     time.Date(2026, 1, 31, 0, 0, 0, 0, time.UTC),
+			Description: "Keen Edge Exercise",
+			ExerciseEventPOC: "Mike",
+			Divisions: keenEdgeDivisions,
 		}
-		r.CreateExerciseDB(exercise2)
+		r.CreateExerciseDB(keenEdge)
+
+		// Create BALIKATAN exercise
+		balicatanDivisions := r.createStandardDivisions()
+		// Add some variation to BALIKATAN
+		balicatanDivisions[0].Teams[0].Status = "red"
+		balikatan := models.Exercise{
+			Name:        "BALIKATAN",
+			StartDate:   time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC),
+			EndDate:     time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC),
+			Description: "Balikatan Exercise",
+			Divisions: balicatanDivisions,
+		}
+		r.CreateExerciseDB(balikatan)
 		
-		log.Println("Sample data created successfully")
+		log.Println("Real exercise data created successfully")
 	}
 }
