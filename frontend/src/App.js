@@ -10,22 +10,7 @@ function App() {
   const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
-    // Fetch exercises
-    fetch('/api/exercises')
-      .then(response => response.json())
-      .then(data => {
-        // Ensure data is an array before setting
-        if (Array.isArray(data)) {
-          setExercises(data);
-        } else {
-          console.error('Error: Exercises data is not an array', data);
-          setExercises([]); // Set to empty array on error
-        }
-      })
-      .catch(error => {
-        console.error('Error fetching exercises:', error);
-        setExercises([]); // Set to empty array on error
-      });
+    fetchExercises();
   }, []);
 
   const handleExerciseClick = (exercise) => {
@@ -36,6 +21,25 @@ function App() {
   const handleCloseModal = () => {
     setShowModal(false);
     setSelectedExercise(null);
+    // Refresh exercises data to pick up any changes made in the modal
+    fetchExercises();
+  };
+
+  const fetchExercises = () => {
+    fetch('/api/exercises')
+      .then(response => response.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setExercises(data);
+        } else {
+          console.error('Error: Exercises data is not an array', data);
+          setExercises([]);
+        }
+      })
+      .catch(error => {
+        console.error('Error fetching exercises:', error);
+        setExercises([]);
+      });
   };
 
   return (

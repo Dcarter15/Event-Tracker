@@ -24,7 +24,7 @@ func NewPostgresRepository() *PostgresRepository {
 func (r *PostgresRepository) GetAllExercisesDB() []models.Exercise {
 	query := `
 		SELECT id, name, start_date, end_date, description, 
-		       COALESCE(exercise_event_poc, ''), COALESCE(aoc_involvement, ''), COALESCE(srd_poc, ''), COALESCE(cpd_poc, '')
+		       COALESCE(priority, 'medium'), COALESCE(exercise_event_poc, ''), COALESCE(aoc_involvement, ''), COALESCE(srd_poc, ''), COALESCE(cpd_poc, '')
 		FROM exercises
 		ORDER BY start_date
 	`
@@ -39,16 +39,17 @@ func (r *PostgresRepository) GetAllExercisesDB() []models.Exercise {
 	var exercises []models.Exercise
 	for rows.Next() {
 		var ex models.Exercise
-		var desc, eventPoc, aoc, srdPoc, cpdPoc sql.NullString
+		var desc, priority, eventPoc, aoc, srdPoc, cpdPoc sql.NullString
 		
 		err := rows.Scan(&ex.ID, &ex.Name, &ex.StartDate, &ex.EndDate, 
-			&desc, &eventPoc, &aoc, &srdPoc, &cpdPoc)
+			&desc, &priority, &eventPoc, &aoc, &srdPoc, &cpdPoc)
 		if err != nil {
 			log.Printf("Error scanning exercise: %v", err)
 			continue
 		}
 
 		ex.Description = desc.String
+		ex.Priority = priority.String
 		ex.ExerciseEventPOC = eventPoc.String
 		ex.AOCInvolvement = aoc.String
 		ex.SRDPOC = srdPoc.String
@@ -59,6 +60,9 @@ func (r *PostgresRepository) GetAllExercisesDB() []models.Exercise {
 		
 		// Load tasked divisions
 		ex.TaskedDivisions = r.GetTaskedDivisions(ex.ID)
+		
+		// Load events for this exercise
+		ex.Events = r.GetEventsForExercise(ex.ID)
 
 		exercises = append(exercises, ex)
 	}
@@ -73,13 +77,14 @@ func (r *PostgresRepository) GetExerciseByIDDB(id int) (models.Exercise, bool) {
 
 	query := `
 		SELECT id, name, start_date, end_date, description, 
-		       COALESCE(exercise_event_poc, ''), COALESCE(aoc_involvement, ''), COALESCE(srd_poc, ''), COALESCE(cpd_poc, '')
+		       COALESCE(priority, 'medium'), COALESCE(exercise_event_poc, ''), COALESCE(aoc_involvement, ''), COALESCE(srd_poc, ''), COALESCE(cpd_poc, '')
 		FROM exercises
 		WHERE id = $1
 	`
 
+	var priority sql.NullString
 	err := r.db.QueryRow(query, id).Scan(&ex.ID, &ex.Name, &ex.StartDate, &ex.EndDate,
-		&desc, &eventPoc, &aoc, &srdPoc, &cpdPoc)
+		&desc, &priority, &eventPoc, &aoc, &srdPoc, &cpdPoc)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return ex, false
@@ -89,6 +94,7 @@ func (r *PostgresRepository) GetExerciseByIDDB(id int) (models.Exercise, bool) {
 	}
 
 	ex.Description = desc.String
+	ex.Priority = priority.String
 	ex.ExerciseEventPOC = eventPoc.String
 	ex.AOCInvolvement = aoc.String
 	ex.SRDPOC = srdPoc.String
@@ -114,13 +120,13 @@ func (r *PostgresRepository) CreateExerciseDB(exercise models.Exercise) models.E
 
 	// Insert exercise
 	query := `
-		INSERT INTO exercises (name, start_date, end_date, description, exercise_event_poc, aoc_involvement, srd_poc, cpd_poc)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO exercises (name, start_date, end_date, description, priority, exercise_event_poc, aoc_involvement, srd_poc, cpd_poc)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id
 	`
 
 	err = tx.QueryRow(query, exercise.Name, exercise.StartDate, exercise.EndDate,
-		exercise.Description, exercise.ExerciseEventPOC, exercise.AOCInvolvement, exercise.SRDPOC, exercise.CPDPOC).Scan(&exercise.ID)
+		exercise.Description, exercise.Priority, exercise.ExerciseEventPOC, exercise.AOCInvolvement, exercise.SRDPOC, exercise.CPDPOC).Scan(&exercise.ID)
 	if err != nil {
 		log.Printf("Error creating exercise: %v", err)
 		return exercise
@@ -164,13 +170,13 @@ func (r *PostgresRepository) UpdateExerciseDB(exercise models.Exercise) bool {
 
 	query := `
 		UPDATE exercises 
-		SET name = $2, start_date = $3, end_date = $4, description = $5, 
-		    exercise_event_poc = $6, aoc_involvement = $7, srd_poc = $8, cpd_poc = $9, updated_at = CURRENT_TIMESTAMP
+		SET name = $2, start_date = $3, end_date = $4, description = $5, priority = $6,
+		    exercise_event_poc = $7, aoc_involvement = $8, srd_poc = $9, cpd_poc = $10, updated_at = CURRENT_TIMESTAMP
 		WHERE id = $1
 	`
 
 	result, err := tx.Exec(query, exercise.ID, exercise.Name, exercise.StartDate, exercise.EndDate,
-		exercise.Description, exercise.ExerciseEventPOC, exercise.AOCInvolvement, exercise.SRDPOC, exercise.CPDPOC)
+		exercise.Description, exercise.Priority, exercise.ExerciseEventPOC, exercise.AOCInvolvement, exercise.SRDPOC, exercise.CPDPOC)
 	if err != nil {
 		log.Printf("Error updating exercise: %v", err)
 		return false
@@ -556,6 +562,7 @@ func (r *PostgresRepository) InitializeDatabase() {
 			StartDate:   time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
 			EndDate:     time.Date(2026, 8, 16, 0, 0, 0, 0, time.UTC),
 			Description: "Reformation of the Pacific Exercise",
+			Priority:    "high",
 			Divisions: r.createStandardDivisions(),
 		}
 		r.CreateExerciseDB(reforpac)
@@ -569,6 +576,7 @@ func (r *PostgresRepository) InitializeDatabase() {
 			StartDate:   time.Date(2026, 1, 7, 0, 0, 0, 0, time.UTC),
 			EndDate:     time.Date(2026, 1, 31, 0, 0, 0, 0, time.UTC),
 			Description: "Keen Edge Exercise",
+			Priority:    "medium",
 			ExerciseEventPOC: "Mike",
 			Divisions: keenEdgeDivisions,
 		}
@@ -583,10 +591,101 @@ func (r *PostgresRepository) InitializeDatabase() {
 			StartDate:   time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC),
 			EndDate:     time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC),
 			Description: "Balikatan Exercise",
+			Priority:    "low",
 			Divisions: balicatanDivisions,
 		}
 		r.CreateExerciseDB(balikatan)
 		
 		log.Println("Real exercise data created successfully")
 	}
+}
+
+// GetEventsForExercise gets all events for an exercise
+func (r *PostgresRepository) GetEventsForExercise(exerciseID int) []models.Event {
+	query := `
+		SELECT id, exercise_id, name, start_date, end_date, type, priority, poc, status, description, location, created_at, updated_at
+		FROM events
+		WHERE exercise_id = $1
+		ORDER BY start_date, id
+	`
+
+	rows, err := r.db.Query(query, exerciseID)
+	if err != nil {
+		log.Printf("Error fetching events: %v", err)
+		return []models.Event{}
+	}
+	defer rows.Close()
+
+	var events []models.Event
+	for rows.Next() {
+		var event models.Event
+		var poc, description, location sql.NullString
+		
+		err := rows.Scan(&event.ID, &event.ExerciseID, &event.Name, &event.StartDate, 
+			&event.EndDate, &event.Type, &event.Priority, &poc, &event.Status, 
+			&description, &location, &event.CreatedAt, &event.UpdatedAt)
+		if err != nil {
+			log.Printf("Error scanning event: %v", err)
+			continue
+		}
+		
+		event.POC = poc.String
+		event.Description = description.String
+		event.Location = location.String
+		events = append(events, event)
+	}
+
+	return events
+}
+
+// CreateEventDB creates a new event in the database
+func (r *PostgresRepository) CreateEventDB(event models.Event) models.Event {
+	query := `
+		INSERT INTO events (exercise_id, name, start_date, end_date, type, priority, poc, status, description, location)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		RETURNING id, created_at, updated_at
+	`
+
+	err := r.db.QueryRow(query, event.ExerciseID, event.Name, event.StartDate, event.EndDate,
+		event.Type, event.Priority, event.POC, event.Status, event.Description, event.Location).Scan(
+		&event.ID, &event.CreatedAt, &event.UpdatedAt)
+	if err != nil {
+		log.Printf("Error creating event: %v", err)
+		return event
+	}
+
+	return event
+}
+
+// UpdateEventDB updates an event in the database
+func (r *PostgresRepository) UpdateEventDB(event models.Event) bool {
+	query := `
+		UPDATE events 
+		SET name = $2, start_date = $3, end_date = $4, type = $5, priority = $6, 
+		    poc = $7, status = $8, description = $9, location = $10, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $1
+	`
+
+	result, err := r.db.Exec(query, event.ID, event.Name, event.StartDate, event.EndDate,
+		event.Type, event.Priority, event.POC, event.Status, event.Description, event.Location)
+	if err != nil {
+		log.Printf("Error updating event: %v", err)
+		return false
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	return rowsAffected > 0
+}
+
+// DeleteEventDB deletes an event from the database
+func (r *PostgresRepository) DeleteEventDB(id int) bool {
+	query := "DELETE FROM events WHERE id = $1"
+	result, err := r.db.Exec(query, id)
+	if err != nil {
+		log.Printf("Error deleting event: %v", err)
+		return false
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	return rowsAffected > 0
 }

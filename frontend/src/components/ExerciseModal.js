@@ -21,6 +21,8 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
   const [editValues, setEditValues] = useState({});
   const [editingDescription, setEditingDescription] = useState(false);
   const [descriptionValue, setDescriptionValue] = useState('');
+  const [editingPriority, setEditingPriority] = useState(false);
+  const [priorityValue, setPriorityValue] = useState('medium');
   const [editingDivisionLearning, setEditingDivisionLearning] = useState({});
   const [learningValues, setLearningValues] = useState({});
   const [showAddDivision, setShowAddDivision] = useState(false);
@@ -32,6 +34,8 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
     if (exercise && show) {
       // Set initial description value
       setDescriptionValue(exercise.description || '');
+      // Set initial priority value
+      setPriorityValue(exercise.priority || 'medium');
       
       // Fetch divisions specific to this exercise
       fetch(`/api/divisions?exercise_id=${exercise.id}`)
@@ -146,6 +150,32 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
     .catch(error => {
       console.error('Error updating description:', error);
       alert('Failed to update description. Please try again.');
+    });
+  };
+
+  const savePriority = () => {
+    const updatedExercise = {
+      ...exercise,
+      priority: priorityValue
+    };
+
+    fetch(`/api/exercises/${exercise.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(updatedExercise),
+    })
+    .then(response => {
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+      setEditingPriority(false);
+      exercise.priority = priorityValue;
+    })
+    .catch(error => {
+      console.error('Error updating priority:', error);
+      alert('Failed to update priority. Please try again.');
     });
   };
 
@@ -307,6 +337,48 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
               onChange={(e) => setDescriptionValue(e.target.value)}
               placeholder="Enter exercise description"
             />
+          )}
+        </div>
+
+        <div className="mb-3">
+          <div className="d-flex justify-content-between align-items-center mb-2">
+            <h5>Exercise Priority</h5>
+            {!editingPriority ? (
+              <Button variant="outline-primary" size="sm" onClick={() => setEditingPriority(true)}>
+                Edit
+              </Button>
+            ) : (
+              <div>
+                <Button variant="success" size="sm" className="me-2" onClick={savePriority}>
+                  Save
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => {
+                  setEditingPriority(false);
+                  setPriorityValue(exercise.priority || 'medium');
+                }}>
+                  Cancel
+                </Button>
+              </div>
+            )}
+          </div>
+          {!editingPriority ? (
+            <p>
+              <span className="badge bg-secondary me-2">
+                {(exercise.priority || 'medium').charAt(0).toUpperCase() + (exercise.priority || 'medium').slice(1)} Priority
+              </span>
+            </p>
+          ) : (
+            <Form.Group>
+              <Form.Label>Priority Level</Form.Label>
+              <Form.Select
+                value={priorityValue}
+                onChange={(e) => setPriorityValue(e.target.value)}
+              >
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </Form.Select>
+            </Form.Group>
           )}
         </div>
         

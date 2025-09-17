@@ -124,6 +124,21 @@ func createTables() error {
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)`,
+		`CREATE TABLE IF NOT EXISTS events (
+			id SERIAL PRIMARY KEY,
+			exercise_id INTEGER REFERENCES exercises(id) ON DELETE CASCADE,
+			name VARCHAR(255) NOT NULL,
+			start_date TIMESTAMP NOT NULL,
+			end_date TIMESTAMP NOT NULL,
+			type VARCHAR(50) DEFAULT 'milestone',
+			priority VARCHAR(20) DEFAULT 'medium',
+			poc VARCHAR(255),
+			status VARCHAR(50) DEFAULT 'planned',
+			description TEXT,
+			location VARCHAR(255),
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
 	}
 	
 	// Create indexes
@@ -132,6 +147,8 @@ func createTables() error {
 		`CREATE INDEX IF NOT EXISTS idx_divisions_exercise ON divisions(exercise_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_teams_exercise ON teams(exercise_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_teams_division ON teams(division_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_events_exercise ON events(exercise_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_events_dates ON events(start_date, end_date)`,
 	}
 	
 	// Execute table creation
@@ -177,6 +194,20 @@ func createTables() error {
 	`)
 	if err != nil {
 		log.Printf("Warning: failed to add learning_objectives column: %v", err)
+	}
+
+	// Add priority column to exercises if it doesn't exist
+	_, err = DB.Exec(`
+		DO $$ 
+		BEGIN
+			IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+				WHERE table_name = 'exercises' AND column_name = 'priority') THEN
+				ALTER TABLE exercises ADD COLUMN priority VARCHAR(20) DEFAULT 'medium';
+			END IF;
+		END $$;
+	`)
+	if err != nil {
+		log.Printf("Warning: failed to add priority column: %v", err)
 	}
 
 	log.Println("Database schema created/verified successfully")

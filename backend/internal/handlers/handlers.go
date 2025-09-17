@@ -370,3 +370,129 @@ func ChatbotHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"reply": reply})
 }
+
+// GetEvents returns all events for a specific exercise
+func GetEvents(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+	if r.Method == "OPTIONS" {
+		return
+	}
+
+	// Get exercise ID from query parameter
+	exerciseIDStr := r.URL.Query().Get("exercise_id")
+	if exerciseIDStr == "" {
+		http.Error(w, "exercise_id parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	exerciseID, err := strconv.Atoi(exerciseIDStr)
+	if err != nil {
+		http.Error(w, "Invalid exercise_id", http.StatusBadRequest)
+		return
+	}
+
+	// Get events for the exercise using the repository
+	events := repository.GetEventsForExercise(exerciseID)
+	
+	if err := json.NewEncoder(w).Encode(events); err != nil {
+		http.Error(w, "Failed to encode events", http.StatusInternalServerError)
+		return
+	}
+}
+
+// CreateEvent creates a new event
+func CreateEvent(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+	if r.Method == "OPTIONS" {
+		return
+	}
+
+	var event models.Event
+	if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Set default values if not provided
+	if event.Type == "" {
+		event.Type = "milestone"
+	}
+	if event.Priority == "" {
+		event.Priority = "medium"
+	}
+	if event.Status == "" {
+		event.Status = "planned"
+	}
+
+	// Create the event using the repository
+	createdEvent := repository.CreateEvent(event)
+	
+	if err := json.NewEncoder(w).Encode(createdEvent); err != nil {
+		http.Error(w, "Failed to encode event", http.StatusInternalServerError)
+		return
+	}
+}
+
+// UpdateEvent updates an existing event
+func UpdateEvent(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "PUT, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+	if r.Method == "OPTIONS" {
+		return
+	}
+
+	var event models.Event
+	if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Update the event using the repository
+	success := repository.UpdateEvent(event)
+	
+	if success {
+		json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+	} else {
+		http.Error(w, "Failed to update event", http.StatusInternalServerError)
+	}
+}
+
+// DeleteEvent deletes an event
+func DeleteEvent(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+	if r.Method == "OPTIONS" {
+		return
+	}
+
+	// Extract event ID from URL path
+	idStr := r.URL.Path[len("/api/events/"):]
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, "Invalid event ID", http.StatusBadRequest)
+		return
+	}
+
+	// Delete the event using the repository
+	success := repository.DeleteEvent(id)
+	
+	if success {
+		json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+	} else {
+		http.Error(w, "Failed to delete event", http.StatusInternalServerError)
+	}
+}

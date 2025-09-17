@@ -85,3 +85,39 @@ func CreateTeam(team models.Team) models.Team {
 	}
 	return repo.CreateTeamDB(team)
 }
+
+// GetEventsForExercise returns all events for a specific exercise
+func GetEventsForExercise(exerciseID int) []models.Event {
+	if repo == nil {
+		log.Println("Repository not initialized")
+		return []models.Event{}
+	}
+	return repo.GetEventsForExercise(exerciseID)
+}
+
+// CreateEvent creates a new event for an exercise
+func CreateEvent(event models.Event) models.Event {
+	if repo == nil {
+		log.Println("Repository not initialized")
+		return event
+	}
+	return repo.CreateEventDB(event)
+}
+
+// UpdateEvent updates an existing event
+func UpdateEvent(event models.Event) bool {
+	if repo == nil {
+		log.Println("Repository not initialized")
+		return false
+	}
+	return repo.UpdateEventDB(event)
+}
+
+// DeleteEvent removes an event by its ID
+func DeleteEvent(id int) bool {
+	if repo == nil {
+		log.Println("Repository not initialized")
+		return false
+	}
+	return repo.DeleteEventDB(id)
+}
