@@ -249,9 +249,9 @@
 }
 
 .event-bar {
-  background-color: #e9ecef;
-  border: 1px solid #ced4da;
-  color: #495057;
+  background-color: #adb5bd;
+  border: 1px solid #868e96;
+  color: #212529;
   box-shadow: 0 1px 3px rgba(0,0,0,0.12);
   display: flex;
   align-items: center;
@@ -476,8 +476,8 @@
 .legend-event-bar {
   width: 40px;
   height: 16px;
-  background-color: #e9ecef;
-  border: 1px solid #ced4da;
+  background-color: #adb5bd;
+  border: 1px solid #868e96;
   border-radius: 3px;
 }
 
