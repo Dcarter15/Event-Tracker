@@ -25,6 +25,42 @@ const GanttChart = ({ exercises, onExerciseClick }) => {
   const [editingEvent, setEditingEvent] = useState(null);
   const [legendCollapsed, setLegendCollapsed] = useState(true);
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [showZoomControls, setShowZoomControls] = useState(false);
+  const [zoomTimeout, setZoomTimeout] = useState(null);
+
+  // Calculate exercise readiness percentage based on team statuses
+  const calculateReadiness = (exercise) => {
+    if (!exercise.divisions || exercise.divisions.length === 0) return null;
+    
+    let totalTeams = 0;
+    let totalScore = 0;
+    
+    exercise.divisions.forEach(division => {
+      if (division.teams && division.teams.length > 0) {
+        division.teams.forEach(team => {
+          totalTeams++;
+          if (team.status === 'green') {
+            totalScore += 1;
+          } else if (team.status === 'yellow') {
+            totalScore += 0.5;
+          }
+          // Red teams contribute 0
+        });
+      }
+    });
+    
+    if (totalTeams === 0) return null;
+    
+    const percentage = (totalScore / totalTeams) * 100;
+    return Math.round(percentage);
+  };
+
+  // Get readiness color based on percentage
+  const getReadinessColor = (percentage) => {
+    if (percentage >= 75) return '#28a745'; // Green
+    if (percentage >= 50) return '#ffc107'; // Yellow
+    return '#dc3545'; // Red
+  };
 
   // Initialize POC values from exercises
   useEffect(() => {
@@ -34,6 +70,15 @@ const GanttChart = ({ exercises, onExerciseClick }) => {
     });
     setPocValues(initialPocValues);
   }, [exercises]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (zoomTimeout) {
+        clearTimeout(zoomTimeout);
+      }
+    };
+  }, [zoomTimeout]);
 
   // --- Date and Timeline Calculations ---
   let chartStartDate, chartEndDate, timelineHeaders;
@@ -79,6 +124,10 @@ const GanttChart = ({ exercises, onExerciseClick }) => {
         return `${weekStart} - ${weekEnd}`;
       case 'month':
       default:
+        // Adjust label based on zoom level to prevent cramping
+        if (zoomLevel < 0.7) {
+          return format(date, 'MMM yy'); // Shorter format when zoomed out
+        }
         return format(date, 'MMM yyyy');
     }
   };
@@ -89,6 +138,23 @@ const GanttChart = ({ exercises, onExerciseClick }) => {
     }
     return null;
   }
+
+  // Show zoom controls with auto-hide
+  const showZoomControlsTemporary = () => {
+    setShowZoomControls(true);
+    
+    // Clear existing timeout
+    if (zoomTimeout) {
+      clearTimeout(zoomTimeout);
+    }
+    
+    // Set new timeout to hide controls after 3 seconds
+    const timeout = setTimeout(() => {
+      setShowZoomControls(false);
+    }, 3000);
+    
+    setZoomTimeout(timeout);
+  };
 
   // Zoom handling
   const handleWheel = (e) => {
@@ -101,7 +167,15 @@ const GanttChart = ({ exercises, onExerciseClick }) => {
         const newZoom = delta > 0 ? prevZoom - zoomFactor : prevZoom + zoomFactor;
         return Math.max(0.5, Math.min(3, newZoom)); // Limit zoom between 0.5x and 3x
       });
+      
+      // Show zoom controls temporarily
+      showZoomControlsTemporary();
     }
+  };
+
+  const handleZoomChange = (newZoom) => {
+    setZoomLevel(newZoom);
+    showZoomControlsTemporary();
   };
 
   const handlePOCEdit = (exerciseId) => {
@@ -221,14 +295,14 @@ const GanttChart = ({ exercises, onExerciseClick }) => {
         </ButtonGroup>
       </div>
 
-      {/* Zoom controls - positioned in upper right, only visible when zoomed */}
-      {zoomLevel !== 1 && (
+      {/* Zoom controls - positioned in upper right, visible during zoom operations */}
+      {showZoomControls && (
         <div className="zoom-controls-fixed">
           <span className="zoom-label">Zoom: {Math.round(zoomLevel * 100)}%</span>
           <ButtonGroup size="sm" className="ms-2">
-            <Button variant="outline-secondary" onClick={() => setZoomLevel(Math.max(0.5, zoomLevel - 0.1))}>−</Button>
-            <Button variant="outline-secondary" onClick={() => setZoomLevel(1)}>Reset</Button>
-            <Button variant="outline-secondary" onClick={() => setZoomLevel(Math.min(3, zoomLevel + 0.1))}>+</Button>
+            <Button variant="outline-secondary" onClick={() => handleZoomChange(Math.max(0.5, zoomLevel - 0.1))}>−</Button>
+            <Button variant="outline-secondary" onClick={() => handleZoomChange(1)}>Reset</Button>
+            <Button variant="outline-secondary" onClick={() => handleZoomChange(Math.min(3, zoomLevel + 0.1))}>+</Button>
           </ButtonGroup>
           <small className="text-muted ms-2 d-block">Ctrl+Scroll to zoom</small>
         </div>
@@ -240,7 +314,7 @@ const GanttChart = ({ exercises, onExerciseClick }) => {
           <div className="gantt-poc-header">Exercise Event POC</div>
           <div className="gantt-row-header">Exercise</div>
           <div className="gantt-timeline" style={{ 
-            gridTemplateColumns: `repeat(${timelineHeaders.length}, ${Math.max(40, 100 * zoomLevel)}px)`
+            gridTemplateColumns: `repeat(${timelineHeaders.length}, ${Math.max(60, 100 * zoomLevel)}px)`
           }}>
             {timelineHeaders.map(headerDate => (
               <div key={headerDate.toString()} className={`gantt-timeline-header gantt-${viewMode}`}>
@@ -265,19 +339,28 @@ const GanttChart = ({ exercises, onExerciseClick }) => {
           const troubledDivisions = getTroubledDivisions(exercise);
           const troubleText = formatTroubledDivisions(troubledDivisions);
           
-          const renderTooltip = (props) => (
-            <Tooltip id={`tooltip-${exercise.id}`} {...props}>
-              <strong>{exercise.name}</strong><br />
-              {format(exerciseStartDate, 'MMM d, yyyy')} - {format(exerciseEndDate, 'MMM d, yyyy')}<br />
-              Priority: {(exercise.priority || 'medium').charAt(0).toUpperCase() + (exercise.priority || 'medium').slice(1)}
-              {troubleText && (
-                <>
+          const renderTooltip = (props) => {
+            const readiness = calculateReadiness(exercise);
+            return (
+              <Tooltip id={`tooltip-${exercise.id}`} {...props}>
+                <strong>{exercise.name}</strong><br />
+                {format(exerciseStartDate, 'MMM d, yyyy')} - {format(exerciseEndDate, 'MMM d, yyyy')}<br />
+                Priority: {(exercise.priority || 'medium').charAt(0).toUpperCase() + (exercise.priority || 'medium').slice(1)}
+                {readiness !== null && (
+                  <>
+                    <br />
+                    Ability to support: <span style={{ color: getReadinessColor(readiness) }}>{readiness}%</span>
+                  </>
+                )}
+                {troubleText && (
+                  <>
                   <br />
                   {troubleText}
                 </>
               )}
             </Tooltip>
           );
+          };
 
           return (
             <div className="gantt-row" key={exercise.id}>
@@ -312,7 +395,7 @@ const GanttChart = ({ exercises, onExerciseClick }) => {
                   width: '100%', 
                   height: '100%', 
                   display: 'grid',
-                  gridTemplateColumns: `repeat(${timelineHeaders.length}, ${Math.max(40, 100 * zoomLevel)}px)`,
+                  gridTemplateColumns: `repeat(${timelineHeaders.length}, ${Math.max(60, 100 * zoomLevel)}px)`,
                   zIndex: 1
                 }}>
                   {timelineHeaders.map((headerDate, index) => {
@@ -353,7 +436,9 @@ const GanttChart = ({ exercises, onExerciseClick }) => {
                         minWidth: `${Math.max(exercise.name.length * 12 + 40, 120)}px`
                       }}
                     >
-                      <span className="gantt-bar-label">{exercise.name}</span>
+                      <span className="gantt-bar-label">
+                        {exercise.name}
+                      </span>
                     </div>
                   </OverlayTrigger>
                 )}
@@ -462,19 +547,19 @@ const GanttChart = ({ exercises, onExerciseClick }) => {
         </div>
 
         <div className="legend-section">
-          <div className="legend-title">Division Status:</div>
+          <div className="legend-title">Team Status (Ability to Support):</div>
           <div className="legend-items">
             <div className="legend-item">
               <span className="legend-status-circle red">🔴</span>
-              <span className="legend-text">Critical Issues</span>
+              <span className="legend-text">Unable to Support (0%)</span>
             </div>
             <div className="legend-item">
               <span className="legend-status-circle yellow">🟡</span>
-              <span className="legend-text">Minor Issues</span>
+              <span className="legend-text">Limited Support (50%)</span>
             </div>
             <div className="legend-item">
               <span className="legend-status-circle green">🟢</span>
-              <span className="legend-text">On Track</span>
+              <span className="legend-text">Full Support (100%)</span>
             </div>
           </div>
         </div>

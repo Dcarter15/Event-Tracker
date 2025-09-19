@@ -53,3 +53,19 @@ type Event struct {
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
 }
+
+type Task struct {
+	ID          int        `json:"id"`
+	ExerciseID  int        `json:"exercise_id"`
+	TeamID      *int       `json:"team_id"`
+	TeamName    string     `json:"team_name"`    // For display purposes
+	DivisionName string    `json:"division_name"` // For display purposes
+	Name        string     `json:"name"`
+	Description string     `json:"description"`
+	Status      string     `json:"status"`       // "pending", "in-progress", "completed"
+	DueDate     *time.Time `json:"due_date"`
+	AssignedTo  string     `json:"assigned_to"`  // Keep for backward compatibility
+	CompletedAt *time.Time `json:"completed_at"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+}

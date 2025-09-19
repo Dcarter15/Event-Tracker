@@ -344,22 +344,7 @@ func (r *PostgresRepository) GetTaskedDivisions(exerciseID int) []string {
 
 // createDefaultDivisions creates default divisions and teams for a new exercise
 func (r *PostgresRepository) createDefaultDivisions(tx *sql.Tx, exerciseID int) []models.Division {
-	divisions := []models.Division{
-		{
-			Name: "Division A",
-			Teams: []models.Team{
-				{Name: "OAT Team", POC: "John Doe", Status: "green", Comments: "All systems operational"},
-				{Name: "Intel Team", POC: "Jane Smith", Status: "yellow", Comments: "Minor communications issues"},
-			},
-		},
-		{
-			Name: "Division B",
-			Teams: []models.Team{
-				{Name: "Ops Team", POC: "Peter Jones", Status: "green", Comments: "Ready for operations"},
-				{Name: "Support Team", POC: "Mary Williams", Status: "red", Comments: "Equipment maintenance required"},
-			},
-		},
-	}
+	divisions := r.createStandardDivisions()
 
 	for i, division := range divisions {
 		divisions[i] = r.createDivision(tx, exerciseID, division)

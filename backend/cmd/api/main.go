@@ -46,6 +46,13 @@ func main() {
 	r.Put("/api/events/{id}", handlers.UpdateEvent)
 	r.Delete("/api/events/{id}", handlers.DeleteEvent)
 
+	// Task endpoints
+	r.Get("/api/tasks", handlers.GetTasks)
+	r.Post("/api/tasks", handlers.CreateTask)
+	r.Put("/api/tasks/{id}", handlers.UpdateTask)
+	r.Put("/api/tasks/{id}/assign", handlers.AssignTaskToTeam)
+	r.Delete("/api/tasks/{id}", handlers.DeleteTask)
+
 	// Chatbot endpoint
 	r.Post("/api/chatbot", handlers.EnhancedChatbotHandler)
 

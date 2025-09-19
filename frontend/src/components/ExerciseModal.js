@@ -16,6 +16,38 @@ const getDivisionColor = (teams) => {
 };
 
 const ExerciseModal = ({ show, handleClose, exercise }) => {
+  // Calculate exercise readiness percentage
+  const calculateReadiness = () => {
+    if (!divisions || divisions.length === 0) return null;
+    
+    let totalTeams = 0;
+    let totalScore = 0;
+    
+    divisions.forEach(division => {
+      if (division.teams && division.teams.length > 0) {
+        division.teams.forEach(team => {
+          totalTeams++;
+          if (team.status === 'green') {
+            totalScore += 1;
+          } else if (team.status === 'yellow') {
+            totalScore += 0.5;
+          }
+          // Red teams contribute 0
+        });
+      }
+    });
+    
+    if (totalTeams === 0) return null;
+    
+    const percentage = (totalScore / totalTeams) * 100;
+    return Math.round(percentage);
+  };
+
+  const getReadinessColor = (percentage) => {
+    if (percentage >= 75) return 'success';
+    if (percentage >= 50) return 'warning';
+    return 'danger';
+  };
   const [divisions, setDivisions] = useState([]);
   const [editingTeam, setEditingTeam] = useState(null);
   const [editValues, setEditValues] = useState({});
@@ -29,6 +61,12 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
   const [newDivisionName, setNewDivisionName] = useState('');
   const [showAddTeam, setShowAddTeam] = useState({});
   const [newTeamName, setNewTeamName] = useState('');
+  const [tasks, setTasks] = useState([]);
+  const [showAddTask, setShowAddTask] = useState(false);
+  const [newTask, setNewTask] = useState({ name: '', description: '', due_date: '' });
+  const [editingTask, setEditingTask] = useState(null);
+  const [editTaskValues, setEditTaskValues] = useState({});
+  const [checkedTasks, setCheckedTasks] = useState({});
 
   useEffect(() => {
     if (exercise && show) {
@@ -36,6 +74,17 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
       setDescriptionValue(exercise.description || '');
       // Set initial priority value
       setPriorityValue(exercise.priority || 'medium');
+      
+      // Fetch tasks specific to this exercise
+      fetch(`/api/tasks?exercise_id=${exercise.id}`)
+        .then(response => response.json())
+        .then(data => {
+          setTasks(data || []);
+        })
+        .catch(error => {
+          console.error('Error fetching tasks:', error);
+          setTasks([]);
+        });
       
       // Fetch divisions specific to this exercise
       fetch(`/api/divisions?exercise_id=${exercise.id}`)
@@ -248,6 +297,219 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
     }
   };
 
+  const addTask = async () => {
+    if (!newTask.name.trim()) {
+      alert('Please enter a task name');
+      return;
+    }
+
+    const taskToCreate = {
+      exercise_id: exercise.id,
+      name: newTask.name,
+      description: newTask.description,
+      due_date: newTask.due_date || null,
+      status: 'pending'
+    };
+
+    try {
+      const response = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(taskToCreate),
+      });
+
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+
+      const createdTask = await response.json();
+      setTasks([...tasks, createdTask]);
+      setNewTask({ name: '', description: '', due_date: '' });
+      setShowAddTask(false);
+    } catch (error) {
+      console.error('Error adding task:', error);
+      alert('Failed to add task. Please try again.');
+    }
+  };
+
+  const updateTask = async (taskId) => {
+    const task = tasks.find(t => t.id === taskId);
+    const updatedTask = {
+      ...task,
+      ...editTaskValues[taskId]
+    };
+
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatedTask),
+      });
+
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+
+      const result = await response.json();
+      setTasks(tasks.map(t => t.id === taskId ? result : t));
+      setEditingTask(null);
+      setEditTaskValues({});
+    } catch (error) {
+      console.error('Error updating task:', error);
+      alert('Failed to update task. Please try again.');
+    }
+  };
+
+  const deleteTask = async (taskId) => {
+    if (!window.confirm('Are you sure you want to delete this task?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+
+      setTasks(tasks.filter(t => t.id !== taskId));
+    } catch (error) {
+      console.error('Error deleting task:', error);
+      alert('Failed to delete task. Please try again.');
+    }
+  };
+
+  const startEditingTask = (task) => {
+    setEditingTask(task.id);
+    setEditTaskValues({
+      [task.id]: {
+        name: task.name,
+        description: task.description || '',
+        due_date: task.due_date ? task.due_date.split('T')[0] : '',
+        assigned_to: task.assigned_to || '',
+        status: task.status
+      }
+    });
+  };
+
+  const cancelEditingTask = () => {
+    setEditingTask(null);
+    setEditTaskValues({});
+  };
+
+  const handleTaskEditChange = (taskId, field, value) => {
+    setEditTaskValues({
+      ...editTaskValues,
+      [taskId]: {
+        ...editTaskValues[taskId],
+        [field]: value
+      }
+    });
+  };
+
+  const assignTaskToTeam = async (taskId, teamId) => {
+    try {
+      const response = await fetch(`/api/tasks/${taskId}/assign`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ team_id: teamId }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+
+      // Refresh tasks to get updated data
+      const tasksResponse = await fetch(`/api/tasks?exercise_id=${exercise.id}`);
+      if (tasksResponse.ok) {
+        const updatedTasks = await tasksResponse.json();
+        setTasks(updatedTasks || []);
+      }
+    } catch (error) {
+      console.error('Error assigning task to team:', error);
+      alert('Failed to assign task to team. Please try again.');
+    }
+  };
+
+  const handleTaskCheck = (taskId) => {
+    setCheckedTasks(prev => ({
+      ...prev,
+      [taskId]: !prev[taskId]
+    }));
+  };
+
+  const markTaskComplete = async (taskId) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...task,
+          status: 'completed'
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+
+      // Refresh tasks to get updated data
+      const tasksResponse = await fetch(`/api/tasks?exercise_id=${exercise.id}`);
+      if (tasksResponse.ok) {
+        const updatedTasks = await tasksResponse.json();
+        setTasks(updatedTasks || []);
+        // Clear the checkbox for this task after marking complete
+        setCheckedTasks(prev => {
+          const newState = { ...prev };
+          delete newState[taskId];
+          return newState;
+        });
+      }
+    } catch (error) {
+      console.error('Error marking task as complete:', error);
+      alert('Failed to mark task as complete. Please try again.');
+    }
+  };
+
+  const unassignTaskFromTeam = async (taskId) => {
+    try {
+      const response = await fetch(`/api/tasks/${taskId}/assign`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ team_id: null }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+
+      // Refresh tasks to get updated data
+      const tasksResponse = await fetch(`/api/tasks?exercise_id=${exercise.id}`);
+      if (tasksResponse.ok) {
+        const updatedTasks = await tasksResponse.json();
+        setTasks(updatedTasks || []);
+      }
+    } catch (error) {
+      console.error('Error unassigning task from team:', error);
+      alert('Failed to unassign task from team. Please try again.');
+    }
+  };
+
   const addTeam = async (divisionId) => {
     if (!newTeamName.trim()) {
       alert('Please enter a team name');
@@ -303,7 +565,23 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
   return (
     <Modal show={show} onHide={handleClose} size="lg">
       <Modal.Header closeButton>
-        <Modal.Title>{exercise.name}</Modal.Title>
+        <Modal.Title>
+          {exercise.name}
+          {(() => {
+            const readiness = calculateReadiness();
+            if (readiness !== null) {
+              return (
+                <span 
+                  className={`badge bg-${getReadinessColor(readiness)} ms-3`}
+                  style={{ fontSize: '0.6em', verticalAlign: 'middle' }}
+                >
+                  Ability to support: {readiness}%
+                </span>
+              );
+            }
+            return null;
+          })()}
+        </Modal.Title>
       </Modal.Header>
       <Modal.Body>
         <div className="mb-3">
@@ -380,6 +658,171 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
               </Form.Select>
             </Form.Group>
           )}
+        </div>
+
+        {/* Tasks Section */}
+        <div className="mb-3">
+          <div className="d-flex justify-content-between align-items-center mb-2">
+            <h5>Tasks</h5>
+            <Button variant="outline-success" size="sm" onClick={() => setShowAddTask(true)}>
+              + Add Task
+            </Button>
+          </div>
+          
+          {/* Add Task Form */}
+          {showAddTask && (
+            <div className="mb-3 p-3 border rounded bg-light">
+              <h6>Add New Task</h6>
+              <div className="mb-2">
+                <Form.Control
+                  type="text"
+                  placeholder="Task name"
+                  value={newTask.name}
+                  onChange={(e) => setNewTask({ ...newTask, name: e.target.value })}
+                />
+              </div>
+              <div className="mb-2">
+                <Form.Control
+                  as="textarea"
+                  rows={2}
+                  placeholder="Description (optional)"
+                  value={newTask.description}
+                  onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
+                />
+              </div>
+              <div className="row mb-2">
+                <div className="col">
+                  <Form.Control
+                    type="date"
+                    placeholder="Due date"
+                    value={newTask.due_date}
+                    onChange={(e) => setNewTask({ ...newTask, due_date: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="d-flex gap-2">
+                <Button variant="success" size="sm" onClick={addTask}>
+                  Add Task
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => {
+                  setShowAddTask(false);
+                  setNewTask({ name: '', description: '', due_date: '' });
+                }}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+          
+          {/* All Tasks List */}
+          {tasks.length === 0 ? (
+            <p className="text-muted">No tasks yet. Click "Add Task" to create one.</p>
+          ) : (
+            <div className="list-group">
+              {tasks.map(task => {
+                  const isEditing = editingTask === task.id;
+                  const taskValues = editTaskValues[task.id] || task;
+                  
+                  return (
+                    <div key={task.id} className="list-group-item">
+                      {!isEditing ? (
+                        <div>
+                          <div className="d-flex justify-content-between align-items-start">
+                            <div className="flex-grow-1">
+                              <h6 className="mb-1">
+                                {task.name}
+                                {task.status === 'completed' && (
+                                  <span className="badge bg-success ms-2">Completed</span>
+                                )}
+                                {task.status === 'in-progress' && (
+                                  <span className="badge bg-warning ms-2">In Progress</span>
+                                )}
+                                {!task.team_id ? (
+                                  <>
+                                    {task.status === 'pending' && (
+                                      <span className="badge bg-secondary ms-2">Pending</span>
+                                    )}
+                                    <span className="badge bg-info ms-2">Unassigned</span>
+                                  </>
+                                ) : (
+                                  <span className="badge bg-primary ms-2">
+                                    Assigned to {task.team_name} ({task.division_name})
+                                  </span>
+                                )}
+                              </h6>
+                              {task.description && (
+                                <p className="mb-1 text-muted small">{task.description}</p>
+                              )}
+                              <div className="small text-muted">
+                                {task.due_date && (
+                                  <span className="me-3">
+                                    <strong>Due:</strong> {new Date(task.due_date).toLocaleDateString()}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="d-flex gap-1">
+                              <Button variant="outline-primary" size="sm" onClick={() => startEditingTask(task)}>
+                                Edit
+                              </Button>
+                              <Button variant="outline-danger" size="sm" onClick={() => deleteTask(task.id)}>
+                                Delete
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <div className="mb-2">
+                            <Form.Control
+                              type="text"
+                              value={taskValues.name}
+                              onChange={(e) => handleTaskEditChange(task.id, 'name', e.target.value)}
+                            />
+                          </div>
+                          <div className="mb-2">
+                            <Form.Control
+                              as="textarea"
+                              rows={2}
+                              value={taskValues.description}
+                              onChange={(e) => handleTaskEditChange(task.id, 'description', e.target.value)}
+                              placeholder="Description (optional)"
+                            />
+                          </div>
+                          <div className="row mb-2">
+                            <div className="col">
+                              <Form.Select
+                                value={taskValues.status}
+                                onChange={(e) => handleTaskEditChange(task.id, 'status', e.target.value)}
+                              >
+                                <option value="pending">Pending</option>
+                                <option value="in-progress">In Progress</option>
+                                <option value="completed">Completed</option>
+                              </Form.Select>
+                            </div>
+                            <div className="col">
+                              <Form.Control
+                                type="date"
+                                value={taskValues.due_date}
+                                onChange={(e) => handleTaskEditChange(task.id, 'due_date', e.target.value)}
+                              />
+                            </div>
+                          </div>
+                          <div className="d-flex gap-2">
+                            <Button variant="success" size="sm" onClick={() => updateTask(task.id)}>
+                              Save
+                            </Button>
+                            <Button variant="secondary" size="sm" onClick={cancelEditingTask}>
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
         </div>
         
         {(exercise.srd_poc || exercise.cpd_poc) && (
@@ -649,6 +1092,115 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
                             </Form.Group>
                           </Form>
                         )}
+
+                        {/* Task Assignment Section */}
+                        <div className="mt-3 pt-3 border-top">
+                          <h6 className="mb-3">Task Assignment</h6>
+                          
+                          {/* Assigned Tasks */}
+                          {(() => {
+                            const teamTasks = tasks.filter(task => task.team_id === team.id);
+                            return teamTasks.length > 0 && (
+                              <div className="mb-3">
+                                <div className="small text-muted mb-2"><strong>Assigned Tasks:</strong></div>
+                                {teamTasks.map(task => (
+                                  <div key={task.id} className="d-flex justify-content-between align-items-center mb-2 p-2 bg-light rounded">
+                                    <div className="d-flex align-items-start">
+                                      <Form.Check
+                                        type="checkbox"
+                                        className="me-2 mt-1"
+                                        checked={checkedTasks[task.id] || false}
+                                        onChange={() => handleTaskCheck(task.id)}
+                                        disabled={task.status === 'completed'}
+                                        title={task.status === 'completed' ? "Task is already completed" : "Check if team can complete this task"}
+                                      />
+                                      <div>
+                                        <span className="fw-bold">{task.name}</span>
+                                        {task.status === 'completed' && (
+                                          <span className="badge bg-success ms-2">Completed</span>
+                                        )}
+                                        {task.status === 'in-progress' && (
+                                          <span className="badge bg-warning ms-2">In Progress</span>
+                                        )}
+                                        {task.status === 'pending' && task.team_id && (
+                                          <span className="badge bg-primary ms-2">Assigned</span>
+                                        )}
+                                        {checkedTasks[task.id] && (
+                                          <span className="badge bg-info ms-2">Can Complete</span>
+                                        )}
+                                        {task.due_date && (
+                                          <div className="small text-muted">
+                                            Due: {new Date(task.due_date).toLocaleDateString()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <div className="d-flex gap-2">
+                                      {checkedTasks[task.id] && task.status !== 'completed' && (
+                                        <Button 
+                                          variant="success" 
+                                          size="sm"
+                                          onClick={() => markTaskComplete(task.id)}
+                                        >
+                                          Mark Complete
+                                        </Button>
+                                      )}
+                                      <Button 
+                                        variant="outline-warning" 
+                                        size="sm"
+                                        onClick={() => unassignTaskFromTeam(task.id)}
+                                      >
+                                        Unassign
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })()}
+
+                          {/* Available Tasks to Assign */}
+                          {(() => {
+                            const unassignedTasks = tasks.filter(task => !task.team_id);
+                            return unassignedTasks.length > 0 && (
+                              <div>
+                                <div className="small text-muted mb-2"><strong>Available Tasks:</strong></div>
+                                {unassignedTasks.map(task => (
+                                  <div key={task.id} className="d-flex justify-content-between align-items-center mb-2 p-2 border rounded">
+                                    <div>
+                                      <span className="fw-bold">{task.name}</span>
+                                      {task.status === 'completed' && (
+                                        <span className="badge bg-success ms-2">Completed</span>
+                                      )}
+                                      {task.status === 'in-progress' && (
+                                        <span className="badge bg-warning ms-2">In Progress</span>
+                                      )}
+                                      {task.status === 'pending' && (
+                                        <span className="badge bg-secondary ms-2">Pending</span>
+                                      )}
+                                      {task.due_date && (
+                                        <div className="small text-muted">
+                                          Due: {new Date(task.due_date).toLocaleDateString()}
+                                        </div>
+                                      )}
+                                    </div>
+                                    <Button 
+                                      variant="outline-primary" 
+                                      size="sm"
+                                      onClick={() => assignTaskToTeam(task.id, team.id)}
+                                    >
+                                      Assign
+                                    </Button>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })()}
+
+                          {tasks.filter(task => !task.team_id).length === 0 && (
+                            <p className="small text-muted">No unassigned tasks available.</p>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
