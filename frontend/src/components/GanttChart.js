@@ -15,7 +15,7 @@ import {
 import { Button, ButtonGroup, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import EventModal from './EventModal';
 
-const GanttChart = ({ exercises, onExerciseClick }) => {
+const GanttChart = ({ exercises, onExerciseClick, onDataUpdated }) => {
   const [viewMode, setViewMode] = useState('month'); // 'month', 'week', 'day'
   const [editingPOC, setEditingPOC] = useState({});
   const [pocValues, setPocValues] = useState({});
@@ -236,7 +236,9 @@ const GanttChart = ({ exercises, onExerciseClick }) => {
 
   const handleEventCreated = (newEvent) => {
     // Refresh the exercises data to include the new event
-    window.location.reload(); // Simple refresh for now, could be optimized
+    if (onDataUpdated) {
+      onDataUpdated();
+    }
   };
 
   const handleCloseEventModal = () => {

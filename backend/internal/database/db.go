@@ -159,6 +159,19 @@ func createTables() error {
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			UNIQUE(task_id, team_id)
 		)`,
+		`CREATE TABLE IF NOT EXISTS activity_log (
+			id SERIAL PRIMARY KEY,
+			activity_type VARCHAR(50) NOT NULL,
+			entity_type VARCHAR(50) NOT NULL,
+			entity_id INTEGER NOT NULL,
+			entity_name VARCHAR(255),
+			action VARCHAR(50) NOT NULL,
+			description TEXT,
+			user_id VARCHAR(255),
+			priority VARCHAR(20) DEFAULT 'normal',
+			metadata JSONB,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
 	}
 	
 	// Create indexes
@@ -172,6 +185,9 @@ func createTables() error {
 		`CREATE INDEX IF NOT EXISTS idx_tasks_exercise ON tasks(exercise_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_task_teams_task ON task_teams(task_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_task_teams_team ON task_teams(team_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_activity_log_type ON activity_log(activity_type)`,
+		`CREATE INDEX IF NOT EXISTS idx_activity_log_entity ON activity_log(entity_type, entity_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_activity_log_created ON activity_log(created_at)`,
 	}
 	
 	// Execute table creation

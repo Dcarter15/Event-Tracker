@@ -6,6 +6,7 @@ import (
 	"srd-calendar-project/backend/internal/database"
 	"srd-calendar-project/backend/internal/handlers"
 	"srd-calendar-project/backend/internal/repository"
+	"srd-calendar-project/backend/internal/notifications"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -21,6 +22,16 @@ func main() {
 
 	// Initialize repository with database
 	repository.Initialize()
+
+	// Initialize WebSocket notification hub
+	notificationHub := notifications.NewHub(database.DB)
+	go notificationHub.Run()
+
+	// Initialize notification service with database access
+	notificationService := notifications.NewNotificationService(notificationHub, database.DB)
+
+	// Make notification service available to handlers
+	handlers.SetNotificationService(notificationService)
 
 	r := chi.NewRouter()
 
@@ -56,6 +67,13 @@ func main() {
 
 	// Chatbot endpoint
 	r.Post("/api/chatbot", handlers.EnhancedChatbotHandler)
+
+	// Notification endpoints
+	r.Get("/api/notifications", handlers.GetNotifications)
+	r.Get("/api/notifications/count", handlers.GetNotificationCount)
+
+	// WebSocket endpoint
+	r.Get("/ws", notificationHub.HandleWebSocket)
 
 	log.Println("Starting server on :8081")
 	if err := http.ListenAndServe(":8081", r); err != nil {

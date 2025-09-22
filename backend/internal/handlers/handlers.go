@@ -31,6 +31,12 @@ func CreateExerciseHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	createdExercise := repository.CreateExercise(exercise)
+
+	// Send notification for exercise creation
+	if notificationService != nil {
+		notificationService.NotifyExerciseCreated(createdExercise.ID, createdExercise.Name, "system") // TODO: Use actual user ID when auth is implemented
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(createdExercise)
@@ -58,6 +64,11 @@ func UpdateExerciseHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Send notification for exercise update
+	if notificationService != nil {
+		notificationService.NotifyExerciseUpdated(exercise.ID, exercise.Name, "system", "Exercise details updated") // TODO: Use actual user ID when auth is implemented
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(exercise) // Return the updated exercise
@@ -72,9 +83,20 @@ func DeleteExerciseHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get exercise name before deletion for notification
+	exerciseName := "Unknown Exercise"
+	if exercise, found := repository.GetExerciseByID(id); found {
+		exerciseName = exercise.Name
+	}
+
 	if !repository.DeleteExercise(id) {
 		http.Error(w, "Exercise not found", http.StatusNotFound)
 		return
+	}
+
+	// Send notification for exercise deletion
+	if notificationService != nil {
+		notificationService.NotifyExerciseDeleted(id, exerciseName, "system") // TODO: Use actual user ID when auth is implemented
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -246,10 +268,13 @@ func UpdateTeam(w http.ResponseWriter, r *http.Request) {
 
 	// Update the team within the exercise's divisions
 	updated := false
+	var oldStatus, divisionName string
 	for i, division := range exercise.Divisions {
 		if division.ID == team.DivisionID {
+			divisionName = division.Name
 			for j, t := range division.Teams {
 				if t.ID == team.ID {
+					oldStatus = t.Status
 					exercise.Divisions[i].Teams[j] = team
 					updated = true
 					break
@@ -270,6 +295,11 @@ func UpdateTeam(w http.ResponseWriter, r *http.Request) {
 	if !repository.UpdateExercise(exercise) {
 		http.Error(w, "Failed to update exercise", http.StatusInternalServerError)
 		return
+	}
+
+	// Send notification for team status change
+	if notificationService != nil && oldStatus != team.Status {
+		notificationService.NotifyTeamStatusChanged(team.ID, team.Name, exercise.Name, divisionName, oldStatus, team.Status, "system") // TODO: Use actual user ID when auth is implemented
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -434,7 +464,17 @@ func CreateEvent(w http.ResponseWriter, r *http.Request) {
 
 	// Create the event using the repository
 	createdEvent := repository.CreateEvent(event)
-	
+
+	// Send notification for event creation
+	if notificationService != nil {
+		// Get exercise name for the notification
+		exerciseName := "Unknown Exercise"
+		if exercise, found := repository.GetExerciseByID(event.ExerciseID); found {
+			exerciseName = exercise.Name
+		}
+		notificationService.NotifyEventCreated(createdEvent.ID, createdEvent.Name, exerciseName, "system") // TODO: Use actual user ID when auth is implemented
+	}
+
 	if err := json.NewEncoder(w).Encode(createdEvent); err != nil {
 		http.Error(w, "Failed to encode event", http.StatusInternalServerError)
 		return
@@ -460,8 +500,17 @@ func UpdateEvent(w http.ResponseWriter, r *http.Request) {
 
 	// Update the event using the repository
 	success := repository.UpdateEvent(event)
-	
+
 	if success {
+		// Send notification for event update
+		if notificationService != nil {
+			// Get exercise name for the notification
+			exerciseName := "Unknown Exercise"
+			if exercise, found := repository.GetExerciseByID(event.ExerciseID); found {
+				exerciseName = exercise.Name
+			}
+			notificationService.NotifyEventUpdated(event.ID, event.Name, exerciseName, "system") // TODO: Use actual user ID when auth is implemented
+		}
 		json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 	} else {
 		http.Error(w, "Failed to update event", http.StatusInternalServerError)
@@ -487,10 +536,29 @@ func DeleteEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get event details before deletion for notification
+	eventName := "Unknown Event"
+	exerciseName := "Unknown Exercise"
+	if events := repository.GetEventsForExercise(0); events != nil { // Get all events to find the one being deleted
+		for _, event := range events {
+			if event.ID == id {
+				eventName = event.Name
+				if exercise, found := repository.GetExerciseByID(event.ExerciseID); found {
+					exerciseName = exercise.Name
+				}
+				break
+			}
+		}
+	}
+
 	// Delete the event using the repository
 	success := repository.DeleteEvent(id)
-	
+
 	if success {
+		// Send notification for event deletion
+		if notificationService != nil {
+			notificationService.NotifyEventDeleted(id, eventName, exerciseName, "system") // TODO: Use actual user ID when auth is implemented
+		}
 		json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 	} else {
 		http.Error(w, "Failed to delete event", http.StatusInternalServerError)

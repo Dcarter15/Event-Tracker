@@ -417,6 +417,14 @@ func AssignTaskToMultipleTeams(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get task name and exercise name for notifications
+	var taskName, exerciseName string
+	err = database.DB.QueryRow("SELECT t.name, e.name FROM tasks t JOIN exercises e ON t.exercise_id = e.id WHERE t.id = $1", taskID).Scan(&taskName, &exerciseName)
+	if err != nil {
+		taskName = "Unknown Task"
+		exerciseName = "Unknown Exercise"
+	}
+
 	// Load assigned teams for response
 	teamsQuery := `
 		SELECT tt.team_id, tm.name, tm.poc, tm.status, tm.comments, d.name as division_name
@@ -438,6 +446,11 @@ func AssignTaskToMultipleTeams(w http.ResponseWriter, r *http.Request) {
 				team.Status = status.String
 				team.Comments = comments.String
 				teams = append(teams, team)
+
+				// Send notification for task assignment
+				if notificationService != nil {
+					notificationService.NotifyTaskAssigned(taskID, taskName, exerciseName, divisionName.String, team.Name, "system") // TODO: Use actual user ID when auth is implemented
+				}
 			}
 		}
 		teamRows.Close()
