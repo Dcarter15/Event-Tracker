@@ -28,7 +28,7 @@ func GetTasks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	query := `
-		SELECT t.id, t.exercise_id, t.team_id, t.name, t.description, t.status, 
+		SELECT t.id, t.exercise_id, t.team_id, t.name, t.description, t.status,
 		       t.due_date, t.assigned_to, t.completed_at, t.created_at, t.updated_at,
 		       COALESCE(tm.name, '') as team_name,
 		       COALESCE(d.name, '') as division_name
@@ -36,11 +36,11 @@ func GetTasks(w http.ResponseWriter, r *http.Request) {
 		LEFT JOIN teams tm ON t.team_id = tm.id
 		LEFT JOIN divisions d ON tm.division_id = d.id
 		WHERE t.exercise_id = $1
-		ORDER BY 
-			CASE t.status 
-				WHEN 'pending' THEN 1 
-				WHEN 'in-progress' THEN 2 
-				WHEN 'completed' THEN 3 
+		ORDER BY
+			CASE t.status
+				WHEN 'pending' THEN 1
+				WHEN 'in-progress' THEN 2
+				WHEN 'completed' THEN 3
 			END,
 			t.due_date ASC NULLS LAST,
 			t.created_at DESC
@@ -94,6 +94,42 @@ func GetTasks(w http.ResponseWriter, r *http.Request) {
 		}
 		if completedAt.Valid {
 			task.CompletedAt = &completedAt.Time
+		}
+
+		// Load all teams assigned to this task from task_teams table
+		teamsQuery := `
+			SELECT tt.team_id, tm.name, tm.poc, tm.status, tm.comments, d.name as division_name
+			FROM task_teams tt
+			JOIN teams tm ON tt.team_id = tm.id
+			LEFT JOIN divisions d ON tm.division_id = d.id
+			WHERE tt.task_id = $1
+			ORDER BY tm.name
+		`
+		teamRows, err := database.DB.Query(teamsQuery, task.ID)
+		if err != nil {
+			log.Printf("Error loading teams for task %d: %v", task.ID, err)
+		} else {
+			var teamIDs []int
+			var teams []models.Team
+			for teamRows.Next() {
+				var team models.Team
+				var poc, status, comments, divisionName sql.NullString
+				err := teamRows.Scan(&team.ID, &team.Name, &poc, &status, &comments, &divisionName)
+				if err != nil {
+					log.Printf("Error scanning team for task: %v", err)
+					continue
+				}
+				team.POC = poc.String
+				team.Status = status.String
+				team.Comments = comments.String
+				team.ExerciseID = exerciseID
+
+				teamIDs = append(teamIDs, team.ID)
+				teams = append(teams, team)
+			}
+			teamRows.Close()
+			task.TeamIDs = teamIDs
+			task.Teams = teams
 		}
 
 		tasks = append(tasks, task)
@@ -156,6 +192,45 @@ func CreateTask(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Error creating task: %v", err)
 		http.Error(w, "Error creating task", http.StatusInternalServerError)
 		return
+	}
+
+	// Handle multiple team assignments
+	if len(task.TeamIDs) > 0 {
+		for _, teamID := range task.TeamIDs {
+			_, err := database.DB.Exec(
+				"INSERT INTO task_teams (task_id, team_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+				task.ID, teamID)
+			if err != nil {
+				log.Printf("Error assigning task to team %d: %v", teamID, err)
+			}
+		}
+
+		// Load the full team information for response
+		teamsQuery := `
+			SELECT tt.team_id, tm.name, tm.poc, tm.status, tm.comments
+			FROM task_teams tt
+			JOIN teams tm ON tt.team_id = tm.id
+			WHERE tt.task_id = $1
+			ORDER BY tm.name
+		`
+		teamRows, err := database.DB.Query(teamsQuery, task.ID)
+		if err == nil {
+			var teams []models.Team
+			for teamRows.Next() {
+				var team models.Team
+				var poc, status, comments sql.NullString
+				err := teamRows.Scan(&team.ID, &team.Name, &poc, &status, &comments)
+				if err == nil {
+					team.POC = poc.String
+					team.Status = status.String
+					team.Comments = comments.String
+					team.ExerciseID = task.ExerciseID
+					teams = append(teams, team)
+				}
+			}
+			teamRows.Close()
+			task.Teams = teams
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -274,6 +349,105 @@ func AssignTaskToTeam(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"message": "Task assignment updated successfully",
 		"updated_at": updatedAt,
+	})
+}
+
+// AssignTaskToMultipleTeams assigns a task to multiple teams
+func AssignTaskToMultipleTeams(w http.ResponseWriter, r *http.Request) {
+	taskIDStr := chi.URLParam(r, "id")
+	taskID, err := strconv.Atoi(taskIDStr)
+	if err != nil {
+		http.Error(w, "Invalid task ID", http.StatusBadRequest)
+		return
+	}
+
+	var body struct {
+		TeamIDs []int `json:"team_ids"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Start transaction
+	tx, err := database.DB.Begin()
+	if err != nil {
+		log.Printf("Error starting transaction: %v", err)
+		http.Error(w, "Error assigning teams", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	// Clear existing team assignments
+	_, err = tx.Exec("DELETE FROM task_teams WHERE task_id = $1", taskID)
+	if err != nil {
+		log.Printf("Error clearing existing team assignments: %v", err)
+		http.Error(w, "Error assigning teams", http.StatusInternalServerError)
+		return
+	}
+
+	// Add new team assignments
+	for _, teamID := range body.TeamIDs {
+		_, err = tx.Exec("INSERT INTO task_teams (task_id, team_id) VALUES ($1, $2)", taskID, teamID)
+		if err != nil {
+			log.Printf("Error assigning task to team %d: %v", teamID, err)
+			http.Error(w, "Error assigning teams", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// Update task's updated_at timestamp
+	var updatedAt time.Time
+	err = tx.QueryRow("UPDATE tasks SET updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING updated_at", taskID).Scan(&updatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Task not found", http.StatusNotFound)
+		} else {
+			log.Printf("Error updating task timestamp: %v", err)
+			http.Error(w, "Error assigning teams", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Commit transaction
+	if err = tx.Commit(); err != nil {
+		log.Printf("Error committing transaction: %v", err)
+		http.Error(w, "Error assigning teams", http.StatusInternalServerError)
+		return
+	}
+
+	// Load assigned teams for response
+	teamsQuery := `
+		SELECT tt.team_id, tm.name, tm.poc, tm.status, tm.comments, d.name as division_name
+		FROM task_teams tt
+		JOIN teams tm ON tt.team_id = tm.id
+		LEFT JOIN divisions d ON tm.division_id = d.id
+		WHERE tt.task_id = $1
+		ORDER BY tm.name
+	`
+	teamRows, err := database.DB.Query(teamsQuery, taskID)
+	var teams []models.Team
+	if err == nil {
+		for teamRows.Next() {
+			var team models.Team
+			var poc, status, comments, divisionName sql.NullString
+			err := teamRows.Scan(&team.ID, &team.Name, &poc, &status, &comments, &divisionName)
+			if err == nil {
+				team.POC = poc.String
+				team.Status = status.String
+				team.Comments = comments.String
+				teams = append(teams, team)
+			}
+		}
+		teamRows.Close()
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message": "Task assigned to multiple teams successfully",
+		"updated_at": updatedAt,
+		"teams": teams,
 	})
 }
 

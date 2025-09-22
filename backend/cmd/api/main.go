@@ -51,6 +51,7 @@ func main() {
 	r.Post("/api/tasks", handlers.CreateTask)
 	r.Put("/api/tasks/{id}", handlers.UpdateTask)
 	r.Put("/api/tasks/{id}/assign", handlers.AssignTaskToTeam)
+	r.Put("/api/tasks/{id}/assign-multiple", handlers.AssignTaskToMultipleTeams)
 	r.Delete("/api/tasks/{id}", handlers.DeleteTask)
 
 	// Chatbot endpoint

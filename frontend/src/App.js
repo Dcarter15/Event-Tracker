@@ -45,10 +45,10 @@ function App() {
   return (
     <div className="App">
       <header className="App-header">
-        <h1>AOC Exercise Tracker</h1>
+        <h1>AOC Event Tracker</h1>
       </header>
       <main className="container-fluid mt-4"> {/* Use container-fluid for more width */}
-        <h2 className="text-center">Exercise Timeline</h2>
+        <h2 className="text-center">Event Timeline</h2>
         {exercises.length > 0 ? (
           <GanttChart exercises={exercises} onExerciseClick={handleExerciseClick} />
         ) : (

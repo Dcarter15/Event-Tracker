@@ -57,9 +57,11 @@ type Event struct {
 type Task struct {
 	ID          int        `json:"id"`
 	ExerciseID  int        `json:"exercise_id"`
-	TeamID      *int       `json:"team_id"`
-	TeamName    string     `json:"team_name"`    // For display purposes
-	DivisionName string    `json:"division_name"` // For display purposes
+	TeamID      *int       `json:"team_id"`      // Keep for backward compatibility
+	TeamIDs     []int      `json:"team_ids"`     // New field for multiple teams
+	Teams       []Team     `json:"teams"`        // Full team objects for display
+	TeamName    string     `json:"team_name"`    // For display purposes (backward compatibility)
+	DivisionName string    `json:"division_name"` // For display purposes (backward compatibility)
 	Name        string     `json:"name"`
 	Description string     `json:"description"`
 	Status      string     `json:"status"`       // "pending", "in-progress", "completed"

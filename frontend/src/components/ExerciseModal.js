@@ -67,6 +67,8 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
   const [editingTask, setEditingTask] = useState(null);
   const [editTaskValues, setEditTaskValues] = useState({});
   const [checkedTasks, setCheckedTasks] = useState({});
+  const [showMultiAssign, setShowMultiAssign] = useState({});
+  const [selectedTeams, setSelectedTeams] = useState({});
 
   useEffect(() => {
     if (exercise && show) {
@@ -415,12 +417,19 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
 
   const assignTaskToTeam = async (taskId, teamId) => {
     try {
-      const response = await fetch(`/api/tasks/${taskId}/assign`, {
+      // Get current task to see existing team assignments
+      const currentTask = tasks.find(t => t.id === taskId);
+      const existingTeamIds = currentTask.teams ? currentTask.teams.map(t => t.id) : (currentTask.team_id ? [currentTask.team_id] : []);
+
+      // Add new team to existing teams (avoid duplicates)
+      const updatedTeamIds = [...new Set([...existingTeamIds, teamId])];
+
+      const response = await fetch(`/api/tasks/${taskId}/assign-multiple`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ team_id: teamId }),
+        body: JSON.stringify({ team_ids: updatedTeamIds }),
       });
 
       if (!response.ok) {
@@ -484,18 +493,38 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
     }
   };
 
-  const unassignTaskFromTeam = async (taskId) => {
+  const unassignTaskFromTeam = async (taskId, specificTeamId = null) => {
     try {
-      const response = await fetch(`/api/tasks/${taskId}/assign`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ team_id: null }),
-      });
+      if (specificTeamId) {
+        // Remove specific team while keeping others
+        const currentTask = tasks.find(t => t.id === taskId);
+        const existingTeamIds = currentTask.teams ? currentTask.teams.map(t => t.id) : (currentTask.team_id ? [currentTask.team_id] : []);
+        const updatedTeamIds = existingTeamIds.filter(id => id !== specificTeamId);
 
-      if (!response.ok) {
-        throw new Error('Network response was not ok');
+        const response = await fetch(`/api/tasks/${taskId}/assign-multiple`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ team_ids: updatedTeamIds }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
+        }
+      } else {
+        // Remove all teams (original behavior)
+        const response = await fetch(`/api/tasks/${taskId}/assign`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ team_id: null }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
+        }
       }
 
       // Refresh tasks to get updated data
@@ -508,6 +537,74 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
       console.error('Error unassigning task from team:', error);
       alert('Failed to unassign task from team. Please try again.');
     }
+  };
+
+  const assignTaskToMultipleTeams = async (taskId) => {
+    const newTeamIds = selectedTeams[taskId] || [];
+
+    if (newTeamIds.length === 0) {
+      alert('Please select at least one team to assign the task to.');
+      return;
+    }
+
+    try {
+      // Get current task to see existing team assignments
+      const currentTask = tasks.find(t => t.id === taskId);
+      const existingTeamIds = currentTask.teams ? currentTask.teams.map(t => t.id) : (currentTask.team_id ? [currentTask.team_id] : []);
+
+      // Add new teams to existing teams (avoid duplicates)
+      const allTeamIds = [...new Set([...existingTeamIds, ...newTeamIds])];
+
+      const response = await fetch(`/api/tasks/${taskId}/assign-multiple`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ team_ids: allTeamIds }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+
+      // Refresh tasks to get updated data
+      const tasksResponse = await fetch(`/api/tasks?exercise_id=${exercise.id}`);
+      if (tasksResponse.ok) {
+        const updatedTasks = await tasksResponse.json();
+        setTasks(updatedTasks || []);
+      }
+
+      // Close multi-assign modal and clear selections
+      setShowMultiAssign({ ...showMultiAssign, [taskId]: false });
+      setSelectedTeams({ ...selectedTeams, [taskId]: [] });
+    } catch (error) {
+      console.error('Error assigning task to multiple teams:', error);
+      alert('Failed to assign task to teams. Please try again.');
+    }
+  };
+
+  const handleTeamSelection = (taskId, teamId, checked) => {
+    setSelectedTeams(prev => {
+      const currentSelection = prev[taskId] || [];
+      if (checked) {
+        return { ...prev, [taskId]: [...currentSelection, teamId] };
+      } else {
+        return { ...prev, [taskId]: currentSelection.filter(id => id !== teamId) };
+      }
+    });
+  };
+
+  const getAllTeams = () => {
+    const allTeams = [];
+    divisions.forEach(division => {
+      division.teams?.forEach(team => {
+        allTeams.push({
+          ...team,
+          divisionName: division.name
+        });
+      });
+    });
+    return allTeams;
   };
 
   const addTeam = async (divisionId) => {
@@ -731,13 +828,10 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
                             <div className="flex-grow-1">
                               <h6 className="mb-1">
                                 {task.name}
-                                {task.status === 'completed' && (
-                                  <span className="badge bg-success ms-2">Completed</span>
-                                )}
                                 {task.status === 'in-progress' && (
                                   <span className="badge bg-warning ms-2">In Progress</span>
                                 )}
-                                {!task.team_id ? (
+                                {(!task.teams || task.teams.length === 0) && !task.team_id ? (
                                   <>
                                     {task.status === 'pending' && (
                                       <span className="badge bg-secondary ms-2">Pending</span>
@@ -745,9 +839,19 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
                                     <span className="badge bg-info ms-2">Unassigned</span>
                                   </>
                                 ) : (
-                                  <span className="badge bg-primary ms-2">
-                                    Assigned to {task.team_name} ({task.division_name})
-                                  </span>
+                                  <>
+                                    {task.teams && task.teams.length > 0 ? (
+                                      task.teams.map((team, idx) => (
+                                        <span key={team.id} className="badge bg-primary ms-2">
+                                          {team.name} ({team.divisionName || divisions.find(d => d.teams?.some(t => t.id === team.id))?.name || 'Unknown'})
+                                        </span>
+                                      ))
+                                    ) : task.team_id ? (
+                                      <span className="badge bg-primary ms-2">
+                                        Assigned to {task.team_name} ({task.division_name})
+                                      </span>
+                                    ) : null}
+                                  </>
                                 )}
                               </h6>
                               {task.description && (
@@ -1099,7 +1203,10 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
                           
                           {/* Assigned Tasks */}
                           {(() => {
-                            const teamTasks = tasks.filter(task => task.team_id === team.id);
+                            const teamTasks = tasks.filter(task =>
+                              task.team_id === team.id ||
+                              (task.teams && task.teams.some(t => t.id === team.id))
+                            );
                             return teamTasks.length > 0 && (
                               <div className="mb-3">
                                 <div className="small text-muted mb-2"><strong>Assigned Tasks:</strong></div>
@@ -1111,22 +1218,18 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
                                         className="me-2 mt-1"
                                         checked={checkedTasks[task.id] || false}
                                         onChange={() => handleTaskCheck(task.id)}
-                                        disabled={task.status === 'completed'}
-                                        title={task.status === 'completed' ? "Task is already completed" : "Check if team can complete this task"}
+                                        title="Check if team can handle this task"
                                       />
                                       <div>
                                         <span className="fw-bold">{task.name}</span>
-                                        {task.status === 'completed' && (
-                                          <span className="badge bg-success ms-2">Completed</span>
-                                        )}
                                         {task.status === 'in-progress' && (
                                           <span className="badge bg-warning ms-2">In Progress</span>
                                         )}
-                                        {task.status === 'pending' && task.team_id && (
+                                        {task.status === 'pending' && (
                                           <span className="badge bg-primary ms-2">Assigned</span>
                                         )}
                                         {checkedTasks[task.id] && (
-                                          <span className="badge bg-info ms-2">Can Complete</span>
+                                          <span className="badge bg-info ms-2">Can Handle</span>
                                         )}
                                         {task.due_date && (
                                           <div className="small text-muted">
@@ -1136,21 +1239,12 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
                                       </div>
                                     </div>
                                     <div className="d-flex gap-2">
-                                      {checkedTasks[task.id] && task.status !== 'completed' && (
-                                        <Button 
-                                          variant="success" 
-                                          size="sm"
-                                          onClick={() => markTaskComplete(task.id)}
-                                        >
-                                          Mark Complete
-                                        </Button>
-                                      )}
-                                      <Button 
-                                        variant="outline-warning" 
+                                      <Button
+                                        variant="outline-warning"
                                         size="sm"
-                                        onClick={() => unassignTaskFromTeam(task.id)}
+                                        onClick={() => unassignTaskFromTeam(task.id, team.id)}
                                       >
-                                        Unassign
+                                        Unassign from {team.name}
                                       </Button>
                                     </div>
                                   </div>
@@ -1161,22 +1255,36 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
 
                           {/* Available Tasks to Assign */}
                           {(() => {
-                            const unassignedTasks = tasks.filter(task => !task.team_id);
-                            return unassignedTasks.length > 0 && (
+                            // Show all tasks except those already assigned to this specific team
+                            const availableTasks = tasks.filter(task => {
+                              const isAssignedToThisTeam = task.team_id === team.id ||
+                                (task.teams && task.teams.some(t => t.id === team.id));
+                              return !isAssignedToThisTeam;
+                            });
+
+                            return availableTasks.length > 0 && (
                               <div>
                                 <div className="small text-muted mb-2"><strong>Available Tasks:</strong></div>
-                                {unassignedTasks.map(task => (
+                                {availableTasks.map(task => (
                                   <div key={task.id} className="d-flex justify-content-between align-items-center mb-2 p-2 border rounded">
                                     <div>
                                       <span className="fw-bold">{task.name}</span>
-                                      {task.status === 'completed' && (
-                                        <span className="badge bg-success ms-2">Completed</span>
-                                      )}
                                       {task.status === 'in-progress' && (
                                         <span className="badge bg-warning ms-2">In Progress</span>
                                       )}
                                       {task.status === 'pending' && (
                                         <span className="badge bg-secondary ms-2">Pending</span>
+                                      )}
+                                      {/* Show which other teams this task is assigned to */}
+                                      {task.teams && task.teams.length > 0 && (
+                                        <div className="small text-muted">
+                                          Also assigned to: {task.teams.map(t => t.name).join(', ')}
+                                        </div>
+                                      )}
+                                      {task.team_id && task.team_name && task.team_id !== team.id && (
+                                        <div className="small text-muted">
+                                          Also assigned to: {task.team_name}
+                                        </div>
                                       )}
                                       {task.due_date && (
                                         <div className="small text-muted">
@@ -1184,8 +1292,8 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
                                         </div>
                                       )}
                                     </div>
-                                    <Button 
-                                      variant="outline-primary" 
+                                    <Button
+                                      variant="outline-primary"
                                       size="sm"
                                       onClick={() => assignTaskToTeam(task.id, team.id)}
                                     >
@@ -1197,8 +1305,12 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
                             );
                           })()}
 
-                          {tasks.filter(task => !task.team_id).length === 0 && (
-                            <p className="small text-muted">No unassigned tasks available.</p>
+                          {tasks.filter(task => {
+                            const isAssignedToThisTeam = task.team_id === team.id ||
+                              (task.teams && task.teams.some(t => t.id === team.id));
+                            return !isAssignedToThisTeam;
+                          }).length === 0 && (
+                            <p className="small text-muted">All tasks are already assigned to this team.</p>
                           )}
                         </div>
                       </div>

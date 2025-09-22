@@ -152,6 +152,13 @@ func createTables() error {
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)`,
+		`CREATE TABLE IF NOT EXISTS task_teams (
+			id SERIAL PRIMARY KEY,
+			task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+			team_id INTEGER REFERENCES teams(id) ON DELETE CASCADE,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(task_id, team_id)
+		)`,
 	}
 	
 	// Create indexes
@@ -163,6 +170,8 @@ func createTables() error {
 		`CREATE INDEX IF NOT EXISTS idx_events_exercise ON events(exercise_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_events_dates ON events(start_date, end_date)`,
 		`CREATE INDEX IF NOT EXISTS idx_tasks_exercise ON tasks(exercise_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_task_teams_task ON task_teams(task_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_task_teams_team ON task_teams(team_id)`,
 	}
 	
 	// Execute table creation
