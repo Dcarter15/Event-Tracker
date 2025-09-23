@@ -12,10 +12,10 @@ import {
   startOfWeek,
   endOfWeek
 } from 'date-fns';
-import { Button, ButtonGroup, OverlayTrigger, Tooltip } from 'react-bootstrap';
+import { Button, ButtonGroup, OverlayTrigger, Tooltip, Dropdown } from 'react-bootstrap';
 import EventModal from './EventModal';
 
-const GanttChart = ({ exercises, onExerciseClick }) => {
+const GanttChart = ({ exercises, onExerciseClick, onDivisionFilter, filteredView, onClearFilter }) => {
   const [viewMode, setViewMode] = useState('month'); // 'month', 'week', 'day'
   const [editingPOC, setEditingPOC] = useState({});
   const [pocValues, setPocValues] = useState({});
@@ -27,6 +27,7 @@ const GanttChart = ({ exercises, onExerciseClick }) => {
   const [zoomLevel, setZoomLevel] = useState(1);
   const [showZoomControls, setShowZoomControls] = useState(false);
   const [zoomTimeout, setZoomTimeout] = useState(null);
+  const [availableDivisions, setAvailableDivisions] = useState([]);
 
   // Calculate exercise readiness percentage based on team statuses
   const calculateReadiness = (exercise) => {
@@ -69,6 +70,21 @@ const GanttChart = ({ exercises, onExerciseClick }) => {
       initialPocValues[exercise.id] = exercise.exercise_event_poc || '';
     });
     setPocValues(initialPocValues);
+  }, [exercises]);
+
+  // Fetch available divisions from exercises
+  useEffect(() => {
+    if (exercises && exercises.length > 0) {
+      const divisions = new Set();
+      exercises.forEach(exercise => {
+        if (exercise.divisions) {
+          exercise.divisions.forEach(division => {
+            divisions.add(division.name);
+          });
+        }
+      });
+      setAvailableDivisions([...divisions].sort());
+    }
   }, [exercises]);
 
   // Cleanup timeout on unmount
@@ -287,12 +303,45 @@ const GanttChart = ({ exercises, onExerciseClick }) => {
 
   return (
     <div>
-      <div className="gantt-controls mb-3">
+      <div className="gantt-controls mb-3 d-flex justify-content-between align-items-center">
         <ButtonGroup>
           <Button variant={viewMode === 'month' ? 'primary' : 'secondary'} onClick={() => setViewMode('month')}>Month</Button>
           <Button variant={viewMode === 'week' ? 'primary' : 'secondary'} onClick={() => setViewMode('week')}>Week</Button>
           <Button variant={viewMode === 'day' ? 'primary' : 'secondary'} onClick={() => setViewMode('day')}>Day</Button>
         </ButtonGroup>
+
+        <div className="d-flex align-items-center gap-2">
+          {filteredView && (
+            <div className="d-flex align-items-center">
+              <span className="badge bg-primary me-2">
+                Filtered by {filteredView.type}: {filteredView.displayName || filteredView.name}
+              </span>
+              <Button variant="outline-secondary" size="sm" onClick={onClearFilter}>
+                Clear Filter
+              </Button>
+            </div>
+          )}
+
+          <Dropdown>
+            <Dropdown.Toggle variant={filteredView?.type === 'division' ? 'primary' : 'outline-primary'} size="sm">
+              Filter by Division
+            </Dropdown.Toggle>
+            <Dropdown.Menu>
+              {availableDivisions.map(division => (
+                <Dropdown.Item
+                  key={division}
+                  onClick={() => onDivisionFilter && onDivisionFilter({ name: division })}
+                  active={filteredView?.type === 'division' && filteredView?.name === division}
+                >
+                  {division}
+                </Dropdown.Item>
+              ))}
+              {availableDivisions.length === 0 && (
+                <Dropdown.Item disabled>No divisions available</Dropdown.Item>
+              )}
+            </Dropdown.Menu>
+          </Dropdown>
+        </div>
       </div>
 
       {/* Zoom controls - positioned in upper right, visible during zoom operations */}

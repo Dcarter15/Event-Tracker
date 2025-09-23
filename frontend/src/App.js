@@ -70,21 +70,17 @@ function App() {
         <h1>AOC Event Tracker</h1>
       </header>
       <main className="container-fluid mt-4"> {/* Use container-fluid for more width */}
-        <div className="d-flex justify-content-between align-items-center mb-3">
+        <div className="mb-3">
           <h2>Event Timeline</h2>
-          {filteredView && (
-            <div className="d-flex align-items-center">
-              <span className="badge bg-primary me-2">
-                Filtered by {filteredView.type}: {filteredView.displayName || filteredView.name}
-              </span>
-              <button className="btn btn-outline-secondary btn-sm" onClick={clearFilter}>
-                Show All Exercises
-              </button>
-            </div>
-          )}
         </div>
         {exercises.length > 0 ? (
-          <GanttChart exercises={exercises} onExerciseClick={handleExerciseClick} />
+          <GanttChart
+            exercises={exercises}
+            onExerciseClick={handleExerciseClick}
+            onDivisionFilter={handleDivisionClick}
+            filteredView={filteredView}
+            onClearFilter={clearFilter}
+          />
         ) : (
           <p>Loading exercises or no exercises to display.</p>
         )}
