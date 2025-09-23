@@ -70,7 +70,10 @@ func main() {
 
 	// Notification endpoints
 	r.Get("/api/notifications", handlers.GetNotifications)
+	r.Get("/api/notifications/read", handlers.GetReadNotifications)
 	r.Get("/api/notifications/count", handlers.GetNotificationCount)
+	r.Post("/api/notifications/clear", handlers.ClearNotifications)
+	r.Post("/api/notifications/mark-read", handlers.MarkNotificationAsRead)
 
 	// WebSocket endpoint
 	r.Get("/ws", notificationHub.HandleWebSocket)

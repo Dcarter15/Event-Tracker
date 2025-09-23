@@ -1,8 +1,10 @@
 package notifications
 
 import (
+	"crypto/md5"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -24,9 +26,10 @@ type Notification struct {
 
 // Client represents a connected WebSocket client
 type Client struct {
-	hub  *Hub
-	conn *websocket.Conn
-	send chan []byte
+	hub    *Hub
+	conn   *websocket.Conn
+	send   chan []byte
+	userID string // Track user ID for per-user notifications
 }
 
 // Hub maintains the set of active clients and broadcasts messages to the clients
@@ -55,6 +58,29 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+// getUserID extracts user ID from request - matches the function in handlers
+func getUserID(r *http.Request) string {
+	// Check for session ID in header first (sent from frontend)
+	if sessionID := r.Header.Get("X-Session-ID"); sessionID != "" {
+		return sessionID
+	}
+
+	// Check for session ID in query parameter (for WebSocket connections)
+	if sessionID := r.URL.Query().Get("sessionId"); sessionID != "" {
+		return sessionID
+	}
+
+	// Fallback to IP-based identification for WebSocket connections
+	clientIP := r.RemoteAddr
+	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+		clientIP = forwarded
+	}
+
+	// Create a simple hash-based user ID but make it more stable
+	// Use only IP for now to reduce variability
+	return fmt.Sprintf("user_%x", md5.Sum([]byte(clientIP)))[:16]
+}
+
 // NewHub creates a new Hub
 func NewHub(db *sql.DB) *Hub {
 	return &Hub{
@@ -72,12 +98,21 @@ func (h *Hub) sendNotificationCountToClient(client *Client) {
 		return
 	}
 
+	// Count notifications that haven't been read by this user
+	query := `
+		SELECT COUNT(*)
+		FROM activity_log al
+		LEFT JOIN user_notifications un ON al.id = un.notification_id AND un.user_id = $1
+		WHERE un.notification_id IS NULL
+	`
+
 	var count int
-	err := h.db.QueryRow("SELECT COUNT(*) FROM activity_log").Scan(&count)
+	err := h.db.QueryRow(query, client.userID).Scan(&count)
 	if err != nil {
-		log.Printf("Error getting notification count: %v", err)
+		log.Printf("Error getting notification count for user %s: %v", client.userID, err)
 		return
 	}
+	log.Printf("sendNotificationCountToClient: userID = %s, count = %d", client.userID, count)
 
 	countMessage := map[string]interface{}{
 		"type":  "notification_count",
@@ -92,7 +127,7 @@ func (h *Hub) sendNotificationCountToClient(client *Client) {
 
 	select {
 	case client.send <- data:
-		log.Printf("Sent notification count (%d) to newly connected client", count)
+		log.Printf("Sent notification count (%d) to user %s", count, client.userID)
 	default:
 		log.Printf("Failed to send notification count to client")
 	}
@@ -150,35 +185,15 @@ func (h *Hub) BroadcastNotification(notification Notification) {
 	go h.broadcastNotificationCount()
 }
 
-// broadcastNotificationCount sends the current notification count to all connected clients
+// broadcastNotificationCount sends updated notification counts to all connected clients
 func (h *Hub) broadcastNotificationCount() {
 	if h.db == nil {
 		return
 	}
 
-	var count int
-	err := h.db.QueryRow("SELECT COUNT(*) FROM activity_log").Scan(&count)
-	if err != nil {
-		log.Printf("Error getting notification count for broadcast: %v", err)
-		return
-	}
-
-	countMessage := map[string]interface{}{
-		"type":  "notification_count",
-		"count": count,
-	}
-
-	data, err := json.Marshal(countMessage)
-	if err != nil {
-		log.Printf("Error marshaling notification count for broadcast: %v", err)
-		return
-	}
-
-	select {
-	case h.broadcast <- data:
-		log.Printf("Broadcasting updated notification count: %d", count)
-	default:
-		log.Printf("No clients connected to receive notification count update")
+	// Send personalized counts to each client
+	for client := range h.clients {
+		go h.sendNotificationCountToClient(client)
 	}
 }
 
@@ -190,10 +205,14 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get user ID for this connection
+	userID := getUserID(r)
+
 	client := &Client{
-		hub:  h,
-		conn: conn,
-		send: make(chan []byte, 256),
+		hub:    h,
+		conn:   conn,
+		send:   make(chan []byte, 256),
+		userID: userID,
 	}
 
 	client.hub.register <- client

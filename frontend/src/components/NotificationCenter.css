@@ -98,6 +98,32 @@
   align-items: center;
 }
 
+/* Dismiss button styles */
+.dismiss-btn {
+  font-size: 12px !important;
+  padding: 2px 6px !important;
+  min-width: auto !important;
+  min-height: auto !important;
+  line-height: 1 !important;
+  border-radius: 3px !important;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.dismiss-btn:hover {
+  opacity: 1;
+  background-color: #f8f9fa !important;
+  border-color: #dee2e6 !important;
+}
+
+/* View mode button styles */
+.view-mode-btn {
+  font-size: 11px !important;
+  padding: 3px 8px !important;
+  min-width: auto !important;
+  min-height: auto !important;
+}
+
 .notification-critical {
   border-left: 4px solid #dc3545;
   background-color: #fff5f5;
@@ -142,6 +168,18 @@
   animation: slideIn 0.3s ease-out;
 }
 
+/* Clear notifications button */
+.clear-notifications-btn {
+  font-size: 11px;
+  padding: 2px 8px;
+  height: auto;
+  min-height: auto;
+}
+
+.clear-notifications-btn:hover {
+  background-color: #e2e6ea;
+}
+
 /* Mobile responsiveness */
 @media (max-width: 768px) {
   .notification-dropdown {
@@ -158,5 +196,10 @@
     width: 45px;
     height: 45px;
     font-size: 18px;
+  }
+
+  .clear-notifications-btn {
+    font-size: 10px;
+    padding: 1px 6px;
   }
 }

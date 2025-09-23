@@ -3,12 +3,23 @@ import { Dropdown, Badge, ListGroup, Button, Spinner } from 'react-bootstrap';
 import { useWebSocket } from '../contexts/WebSocketContext';
 import './NotificationCenter.css';
 
+// Generate or get session ID for consistent user identification
+const getSessionId = () => {
+  let sessionId = localStorage.getItem('notification-session-id');
+  if (!sessionId) {
+    sessionId = 'user_' + Math.random().toString(36).substr(2, 16);
+    localStorage.setItem('notification-session-id', sessionId);
+  }
+  return sessionId;
+};
+
 const NotificationCenter = () => {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(false);
   const [show, setShow] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [offset, setOffset] = useState(0);
+  const [viewMode, setViewMode] = useState('unread'); // 'unread' or 'read'
   const limit = 20;
 
   // Get notification count from WebSocket context
@@ -20,7 +31,12 @@ const NotificationCenter = () => {
     setLoading(true);
     try {
       const currentOffset = reset ? 0 : offset;
-      const response = await fetch(`/api/notifications?limit=${limit}&offset=${currentOffset}`);
+      const endpoint = viewMode === 'unread' ? '/api/notifications' : '/api/notifications/read';
+      const response = await fetch(`${endpoint}?limit=${limit}&offset=${currentOffset}`, {
+        headers: {
+          'X-Session-ID': getSessionId(),
+        },
+      });
       const data = await response.json();
 
       if (reset) {
@@ -47,7 +63,76 @@ const NotificationCenter = () => {
     }
   };
 
+  // Clear all notifications for current user
+  const clearNotifications = async () => {
+    try {
+      const response = await fetch('/api/notifications/clear', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Session-ID': getSessionId(),
+        },
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log(`Cleared ${result.cleared} notifications`);
+
+        // Reset the notification list and refresh the count
+        setNotifications([]);
+        setOffset(0);
+        setHasMore(false);
+
+        // The WebSocket will automatically update the count
+      } else {
+        console.error('Failed to clear notifications');
+      }
+    } catch (error) {
+      console.error('Error clearing notifications:', error);
+    }
+  };
+
+  // Mark individual notification as read
+  const markNotificationAsRead = async (notificationId) => {
+    try {
+      const response = await fetch('/api/notifications/mark-read', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Session-ID': getSessionId(),
+        },
+        body: JSON.stringify({ notification_id: notificationId }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log(`Marked notification ${notificationId} as read:`, result.marked);
+
+        // Remove the notification from the current list
+        setNotifications(prev => prev.filter(n => n.id !== notificationId));
+
+        // The WebSocket will automatically update the count
+      } else {
+        console.error('Failed to mark notification as read');
+      }
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
+  };
+
   // No need for initial notification count fetch since it comes from WebSocket
+
+  // Switch between unread and read notifications
+  const switchViewMode = (mode) => {
+    if (mode !== viewMode) {
+      setViewMode(mode);
+      setNotifications([]);
+      setOffset(0);
+      setHasMore(true);
+      // Fetch notifications for the new mode
+      setTimeout(() => fetchNotifications(true), 0);
+    }
+  };
 
   // Fetch notifications when dropdown is opened
   const handleToggle = (isOpen) => {
@@ -105,8 +190,39 @@ const NotificationCenter = () => {
       aria-labelledby={labeledBy}
     >
       <div className="notification-header">
-        <h6 className="mb-0">Notifications</h6>
-        <small className="text-muted">{notificationCount} total</small>
+        <div className="d-flex align-items-center justify-content-between w-100">
+          <h6 className="mb-0">Notifications</h6>
+          <div className="d-flex align-items-center gap-2">
+            <div className="btn-group btn-group-sm">
+              <Button
+                variant={viewMode === 'unread' ? 'primary' : 'outline-primary'}
+                size="sm"
+                onClick={() => switchViewMode('unread')}
+                className="view-mode-btn"
+              >
+                Unread ({notificationCount})
+              </Button>
+              <Button
+                variant={viewMode === 'read' ? 'primary' : 'outline-primary'}
+                size="sm"
+                onClick={() => switchViewMode('read')}
+                className="view-mode-btn"
+              >
+                Read
+              </Button>
+            </div>
+            {viewMode === 'unread' && notificationCount > 0 && (
+              <Button
+                variant="outline-secondary"
+                size="sm"
+                onClick={clearNotifications}
+                className="clear-notifications-btn"
+              >
+                Clear All
+              </Button>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="notification-list">
@@ -117,7 +233,7 @@ const NotificationCenter = () => {
           </div>
         ) : notifications.length === 0 ? (
           <div className="text-center text-muted p-3">
-            No notifications yet
+            {viewMode === 'unread' ? 'No unread notifications' : 'No read notifications'}
           </div>
         ) : (
           <>
@@ -132,11 +248,24 @@ const NotificationCenter = () => {
                       {notification.message}
                     </div>
                     <div className="notification-meta">
-                      <small className="text-muted">
-                        {formatTimestamp(notification.created_at)}
-                      </small>
-                      {notification.priority === 'critical' && (
-                        <Badge bg="danger" size="sm" className="ms-2">Critical</Badge>
+                      <div className="d-flex align-items-center gap-2">
+                        <small className="text-muted">
+                          {formatTimestamp(notification.created_at)}
+                        </small>
+                        {notification.priority === 'critical' && (
+                          <Badge bg="danger" size="sm">Critical</Badge>
+                        )}
+                      </div>
+                      {viewMode === 'unread' && (
+                        <Button
+                          variant="outline-secondary"
+                          size="sm"
+                          onClick={() => markNotificationAsRead(notification.id)}
+                          className="dismiss-btn"
+                          title="Mark as read"
+                        >
+                          ✕
+                        </Button>
                       )}
                     </div>
                   </div>

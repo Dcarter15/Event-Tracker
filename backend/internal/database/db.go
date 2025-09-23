@@ -188,6 +188,15 @@ func createTables() error {
 		`CREATE INDEX IF NOT EXISTS idx_activity_log_type ON activity_log(activity_type)`,
 		`CREATE INDEX IF NOT EXISTS idx_activity_log_entity ON activity_log(entity_type, entity_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_activity_log_created ON activity_log(created_at)`,
+		`CREATE TABLE IF NOT EXISTS user_notifications (
+			id SERIAL PRIMARY KEY,
+			user_id VARCHAR(255) NOT NULL,
+			notification_id INTEGER REFERENCES activity_log(id) ON DELETE CASCADE,
+			read_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(user_id, notification_id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_user_notifications_user ON user_notifications(user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_user_notifications_notification ON user_notifications(notification_id)`,
 	}
 	
 	// Execute table creation

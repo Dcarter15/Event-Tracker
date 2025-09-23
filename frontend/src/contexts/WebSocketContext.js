@@ -1,6 +1,16 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { toast } from 'react-toastify';
 
+// Generate or get session ID for consistent user identification
+const getSessionId = () => {
+  let sessionId = localStorage.getItem('notification-session-id');
+  if (!sessionId) {
+    sessionId = 'user_' + Math.random().toString(36).substr(2, 16);
+    localStorage.setItem('notification-session-id', sessionId);
+  }
+  return sessionId;
+};
+
 const WebSocketContext = createContext();
 
 export const useWebSocket = () => {
@@ -31,7 +41,8 @@ export const WebSocketProvider = ({ children }) => {
     connectionRef.current = true;
 
     try {
-      const wsUrl = `ws://localhost:8081/ws`;
+      const sessionId = getSessionId();
+      const wsUrl = `ws://localhost:8081/ws?sessionId=${sessionId}`;
       console.log('🔌 Attempting to connect to WebSocket:', wsUrl);
       const newSocket = new WebSocket(wsUrl);
 

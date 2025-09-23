@@ -239,3 +239,10 @@ func (ns *NotificationService) NotifyTeamStatusChanged(teamID int, teamName stri
 	// Broadcast to connected clients
 	ns.hub.BroadcastNotification(notification)
 }
+
+// BroadcastNotificationCountUpdate triggers a broadcast of updated notification counts to all connected clients
+func (ns *NotificationService) BroadcastNotificationCountUpdate() {
+	if ns.hub != nil {
+		ns.hub.broadcastNotificationCount()
+	}
+}
