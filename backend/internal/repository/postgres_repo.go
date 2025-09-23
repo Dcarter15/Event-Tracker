@@ -269,6 +269,46 @@ func (r *PostgresRepository) GetDivisionsForExercise(exerciseID int) []models.Di
 	return divisions
 }
 
+// GetDivisionsForExerciseByName returns only divisions that match the specified name for an exercise
+func (r *PostgresRepository) GetDivisionsForExerciseByName(exerciseID int, divisionName string) []models.Division {
+	log.Printf("DEBUG: GetDivisionsForExerciseByName called with exerciseID=%d, divisionName='%s'", exerciseID, divisionName)
+	query := `
+		SELECT id, name, COALESCE(learning_objectives, '')
+		FROM divisions
+		WHERE exercise_id = $1 AND name = $2
+		ORDER BY id
+	`
+
+	rows, err := r.db.Query(query, exerciseID, divisionName)
+	if err != nil {
+		log.Printf("Error fetching divisions by name for exercise: %v", err)
+		return []models.Division{}
+	}
+	defer rows.Close()
+
+	var divisions []models.Division
+	for rows.Next() {
+		var div models.Division
+		var learningObjectives sql.NullString
+
+		err := rows.Scan(&div.ID, &div.Name, &learningObjectives)
+		if err != nil {
+			log.Printf("Error scanning division: %v", err)
+			continue
+		}
+
+		div.ExerciseID = exerciseID
+		div.LearningObjectives = learningObjectives.String
+
+		// Load teams for this division
+		div.Teams = r.GetTeamsForDivision(exerciseID, div.ID)
+
+		divisions = append(divisions, div)
+	}
+
+	return divisions
+}
+
 // GetTeamsForDivision gets all teams for a division
 func (r *PostgresRepository) GetTeamsForDivision(exerciseID, divisionID int) []models.Team {
 	query := `
@@ -674,3 +714,381 @@ func (r *PostgresRepository) DeleteEventDB(id int) bool {
 	rowsAffected, _ := result.RowsAffected()
 	return rowsAffected > 0
 }
+
+// GetExercisesByDivisionIDDB returns exercises that contain the specified division
+func (r *PostgresRepository) GetExercisesByDivisionIDDB(divisionID int) []models.Exercise {
+	query := `
+		SELECT DISTINCT e.id, e.name, e.start_date, e.end_date, e.description,
+		       COALESCE(e.priority, 'medium'), COALESCE(e.exercise_event_poc, ''), COALESCE(e.aoc_involvement, ''), COALESCE(e.srd_poc, ''), COALESCE(e.cpd_poc, '')
+		FROM exercises e
+		INNER JOIN divisions d ON e.id = d.exercise_id
+		WHERE d.id = $1
+		ORDER BY e.start_date
+	`
+
+	rows, err := r.db.Query(query, divisionID)
+	if err != nil {
+		log.Printf("Error fetching exercises by division ID: %v", err)
+		return []models.Exercise{}
+	}
+	defer rows.Close()
+
+	var exercises []models.Exercise
+	for rows.Next() {
+		var ex models.Exercise
+		var desc, priority, eventPoc, aoc, srdPoc, cpdPoc sql.NullString
+
+		err := rows.Scan(&ex.ID, &ex.Name, &ex.StartDate, &ex.EndDate,
+			&desc, &priority, &eventPoc, &aoc, &srdPoc, &cpdPoc)
+		if err != nil {
+			log.Printf("Error scanning exercise: %v", err)
+			continue
+		}
+
+		ex.Description = desc.String
+		ex.Priority = priority.String
+		ex.ExerciseEventPOC = eventPoc.String
+		ex.AOCInvolvement = aoc.String
+		ex.SRDPOC = srdPoc.String
+		ex.CPDPOC = cpdPoc.String
+
+		// Load divisions for this exercise
+		ex.Divisions = r.GetDivisionsForExercise(ex.ID)
+
+		// Load tasked divisions
+		ex.TaskedDivisions = r.GetTaskedDivisions(ex.ID)
+
+		// Load events for this exercise
+		ex.Events = r.GetEventsForExercise(ex.ID)
+
+		exercises = append(exercises, ex)
+	}
+
+	return exercises
+}
+
+// GetExercisesByTeamIDDB returns exercises that contain the specified team
+func (r *PostgresRepository) GetExercisesByTeamIDDB(teamID int) []models.Exercise {
+	query := `
+		SELECT DISTINCT e.id, e.name, e.start_date, e.end_date, e.description,
+		       COALESCE(e.priority, 'medium'), COALESCE(e.exercise_event_poc, ''), COALESCE(e.aoc_involvement, ''), COALESCE(e.srd_poc, ''), COALESCE(e.cpd_poc, '')
+		FROM exercises e
+		INNER JOIN divisions d ON e.id = d.exercise_id
+		INNER JOIN teams t ON d.id = t.division_id AND e.id = t.exercise_id
+		WHERE t.id = $1
+		ORDER BY e.start_date
+	`
+
+	rows, err := r.db.Query(query, teamID)
+	if err != nil {
+		log.Printf("Error fetching exercises by team ID: %v", err)
+		return []models.Exercise{}
+	}
+	defer rows.Close()
+
+	var exercises []models.Exercise
+	for rows.Next() {
+		var ex models.Exercise
+		var desc, priority, eventPoc, aoc, srdPoc, cpdPoc sql.NullString
+
+		err := rows.Scan(&ex.ID, &ex.Name, &ex.StartDate, &ex.EndDate,
+			&desc, &priority, &eventPoc, &aoc, &srdPoc, &cpdPoc)
+		if err != nil {
+			log.Printf("Error scanning exercise: %v", err)
+			continue
+		}
+
+		ex.Description = desc.String
+		ex.Priority = priority.String
+		ex.ExerciseEventPOC = eventPoc.String
+		ex.AOCInvolvement = aoc.String
+		ex.SRDPOC = srdPoc.String
+		ex.CPDPOC = cpdPoc.String
+
+		// Load divisions for this exercise
+		ex.Divisions = r.GetDivisionsForExercise(ex.ID)
+
+		// Load tasked divisions
+		ex.TaskedDivisions = r.GetTaskedDivisions(ex.ID)
+
+		// Load events for this exercise
+		ex.Events = r.GetEventsForExercise(ex.ID)
+
+		exercises = append(exercises, ex)
+	}
+
+	return exercises
+}
+// DeleteDivisionDB deletes a division and all its teams from the database
+func (r *PostgresRepository) DeleteDivisionDB(id int) bool {
+	tx, err := r.db.Begin()
+	if err != nil {
+		log.Printf("Error starting transaction: %v", err)
+		return false
+	}
+	defer tx.Rollback()
+
+	// First delete all teams in this division
+	_, err = tx.Exec("DELETE FROM teams WHERE division_id = $1", id)
+	if err != nil {
+		log.Printf("Error deleting teams for division %d: %v", id, err)
+		return false
+	}
+
+	// Then delete the division itself
+	result, err := tx.Exec("DELETE FROM divisions WHERE id = $1", id)
+	if err != nil {
+		log.Printf("Error deleting division %d: %v", id, err)
+		return false
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		return false
+	}
+
+	if err = tx.Commit(); err != nil {
+		log.Printf("Error committing transaction: %v", err)
+		return false
+	}
+
+	return true
+}
+
+// DeleteTeamDB deletes a team from the database
+func (r *PostgresRepository) DeleteTeamDB(id int) bool {
+	// Also need to remove any task assignments for this team
+	tx, err := r.db.Begin()
+	if err != nil {
+		log.Printf("Error starting transaction: %v", err)
+		return false
+	}
+	defer tx.Rollback()
+
+	// First, unassign all tasks from this team
+	_, err = tx.Exec("UPDATE tasks SET team_id = NULL WHERE team_id = $1", id)
+	if err != nil {
+		log.Printf("Error unassigning tasks from team %d: %v", id, err)
+		return false
+	}
+
+	// Delete team from team_tasks junction table (if it exists)
+	// First check if the table exists
+	var tableExists bool
+	err = tx.QueryRow("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'team_tasks')").Scan(&tableExists)
+	if err == nil && tableExists {
+		_, err = tx.Exec("DELETE FROM team_tasks WHERE team_id = $1", id)
+		if err != nil {
+			log.Printf("Error deleting from team_tasks table: %v", err)
+			return false
+		}
+	}
+
+	// Then delete the team itself
+	result, err := tx.Exec("DELETE FROM teams WHERE id = $1", id)
+	if err != nil {
+		log.Printf("Error deleting team %d: %v", id, err)
+		return false
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		return false
+	}
+
+	if err = tx.Commit(); err != nil {
+		log.Printf("Error committing transaction: %v", err)
+		return false
+	}
+
+	return true
+}
+
+// GetExercisesByDivisionNameDB returns exercises that contain a division with the specified name
+func (r *PostgresRepository) GetExercisesByDivisionNameDB(divisionName string) []models.Exercise {
+	log.Printf("DEBUG: GetExercisesByDivisionNameDB called with divisionName='%s'", divisionName)
+	query := `
+		SELECT DISTINCT e.id, e.name, e.start_date, e.end_date, e.description,
+		       COALESCE(e.priority, 'medium'), COALESCE(e.exercise_event_poc, ''), COALESCE(e.aoc_involvement, ''), COALESCE(e.srd_poc, ''), COALESCE(e.cpd_poc, '')
+		FROM exercises e
+		INNER JOIN divisions d ON e.id = d.exercise_id
+		WHERE d.name = $1
+		ORDER BY e.start_date
+	`
+
+	rows, err := r.db.Query(query, divisionName)
+	if err != nil {
+		log.Printf("Error fetching exercises by division name: %v", err)
+		return []models.Exercise{}
+	}
+	defer rows.Close()
+
+	var exercises []models.Exercise
+	for rows.Next() {
+		var ex models.Exercise
+		var desc, priority, eventPoc, aoc, srdPoc, cpdPoc sql.NullString
+
+		err := rows.Scan(&ex.ID, &ex.Name, &ex.StartDate, &ex.EndDate,
+			&desc, &priority, &eventPoc, &aoc, &srdPoc, &cpdPoc)
+		if err != nil {
+			log.Printf("Error scanning exercise: %v", err)
+			continue
+		}
+
+		ex.Description = desc.String
+		ex.Priority = priority.String
+		ex.ExerciseEventPOC = eventPoc.String
+		ex.AOCInvolvement = aoc.String
+		ex.SRDPOC = srdPoc.String
+		ex.CPDPOC = cpdPoc.String
+
+		// Load only the divisions that match the filter criteria
+		ex.Divisions = r.GetDivisionsForExerciseByName(ex.ID, divisionName)
+		log.Printf("DEBUG: Exercise %s (ID: %d) has %d matching divisions for name '%s'", ex.Name, ex.ID, len(ex.Divisions), divisionName)
+
+		// Load tasked divisions
+		ex.TaskedDivisions = r.GetTaskedDivisions(ex.ID)
+
+		// Load events for this exercise
+		ex.Events = r.GetEventsForExercise(ex.ID)
+
+		exercises = append(exercises, ex)
+	}
+
+	return exercises
+}
+
+// GetExercisesByTeamNameDB returns exercises that contain a team with the specified name
+func (r *PostgresRepository) GetExercisesByTeamNameDB(teamName string) []models.Exercise {
+	query := `
+		SELECT DISTINCT e.id, e.name, e.start_date, e.end_date, e.description,
+		       COALESCE(e.priority, 'medium'), COALESCE(e.exercise_event_poc, ''), COALESCE(e.aoc_involvement, ''), COALESCE(e.srd_poc, ''), COALESCE(e.cpd_poc, '')
+		FROM exercises e
+		INNER JOIN divisions d ON e.id = d.exercise_id
+		INNER JOIN teams t ON d.id = t.division_id AND e.id = t.exercise_id
+		WHERE t.name = $1
+		ORDER BY e.start_date
+	`
+
+	rows, err := r.db.Query(query, teamName)
+	if err != nil {
+		log.Printf("Error fetching exercises by team name: %v", err)
+		return []models.Exercise{}
+	}
+	defer rows.Close()
+
+	var exercises []models.Exercise
+	for rows.Next() {
+		var ex models.Exercise
+		var desc, priority, eventPoc, aoc, srdPoc, cpdPoc sql.NullString
+
+		err := rows.Scan(&ex.ID, &ex.Name, &ex.StartDate, &ex.EndDate,
+			&desc, &priority, &eventPoc, &aoc, &srdPoc, &cpdPoc)
+		if err != nil {
+			log.Printf("Error scanning exercise: %v", err)
+			continue
+		}
+
+		ex.Description = desc.String
+		ex.Priority = priority.String
+		ex.ExerciseEventPOC = eventPoc.String
+		ex.AOCInvolvement = aoc.String
+		ex.SRDPOC = srdPoc.String
+		ex.CPDPOC = cpdPoc.String
+
+		// Load divisions for this exercise, filtered by team name
+		ex.Divisions = r.GetDivisionsForExerciseByTeamName(ex.ID, teamName)
+
+		// Load tasked divisions
+		ex.TaskedDivisions = r.GetTaskedDivisions(ex.ID)
+
+		// Load events for this exercise
+		ex.Events = r.GetEventsForExercise(ex.ID)
+
+		exercises = append(exercises, ex)
+	}
+
+	return exercises
+}
+
+// GetDivisionsForExerciseByTeamName returns divisions for an exercise that contain a team with the specified name
+func (r *PostgresRepository) GetDivisionsForExerciseByTeamName(exerciseID int, teamName string) []models.Division {
+	query := `
+		SELECT DISTINCT d.id, d.name, COALESCE(d.learning_objectives, '')
+		FROM divisions d
+		INNER JOIN teams t ON d.id = t.division_id
+		WHERE d.exercise_id = $1 AND t.name = $2
+		ORDER BY d.id
+	`
+
+	rows, err := r.db.Query(query, exerciseID, teamName)
+	if err != nil {
+		log.Printf("Error fetching divisions for exercise %d with team %s: %v", exerciseID, teamName, err)
+		return []models.Division{}
+	}
+	defer rows.Close()
+
+	var divisions []models.Division
+	for rows.Next() {
+		var division models.Division
+		var learningObjectives sql.NullString
+
+		err := rows.Scan(&division.ID, &division.Name, &learningObjectives)
+		if err != nil {
+			log.Printf("Error scanning division: %v", err)
+			continue
+		}
+
+		division.ExerciseID = exerciseID
+		division.LearningObjectives = learningObjectives.String
+
+		// Load teams for this division, filtered by team name
+		division.Teams = r.GetTeamsForDivisionByName(division.ID, teamName)
+
+		divisions = append(divisions, division)
+	}
+
+	return divisions
+}
+
+// GetTeamsForDivisionByName returns teams for a division filtered by team name
+func (r *PostgresRepository) GetTeamsForDivisionByName(divisionID int, teamName string) []models.Team {
+	query := `
+		SELECT id, name, COALESCE(poc, ''), COALESCE(status, 'green'),
+		       COALESCE(status_start, CURRENT_TIMESTAMP), COALESCE(status_end, CURRENT_TIMESTAMP),
+		       COALESCE(comments, ''), exercise_id
+		FROM teams
+		WHERE division_id = $1 AND name = $2
+		ORDER BY id
+	`
+
+	rows, err := r.db.Query(query, divisionID, teamName)
+	if err != nil {
+		log.Printf("Error fetching teams for division %d with name %s: %v", divisionID, teamName, err)
+		return []models.Team{}
+	}
+	defer rows.Close()
+
+	var teams []models.Team
+	for rows.Next() {
+		var team models.Team
+		var poc, status, comments sql.NullString
+
+		err := rows.Scan(&team.ID, &team.Name, &poc, &status,
+			&team.StatusStart, &team.StatusEnd, &comments, &team.ExerciseID)
+		if err != nil {
+			log.Printf("Error scanning team: %v", err)
+			continue
+		}
+
+		team.DivisionID = divisionID
+		team.POC = poc.String
+		team.Status = status.String
+		team.Comments = comments.String
+
+		teams = append(teams, team)
+	}
+
+	return teams
+}
+

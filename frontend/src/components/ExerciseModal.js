@@ -15,7 +15,7 @@ const getDivisionColor = (teams) => {
   return 'green';
 };
 
-const ExerciseModal = ({ show, handleClose, exercise }) => {
+const ExerciseModal = ({ show, handleClose, exercise, onDivisionClick, onTeamClick }) => {
   // Calculate exercise readiness percentage
   const calculateReadiness = () => {
     if (!divisions || divisions.length === 0) return null;
@@ -636,7 +636,7 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
       }
 
       const createdTeam = await response.json();
-      
+
       // Update divisions state to include the new team
       const updatedDivisions = divisions.map(div => {
         if (div.id === divisionId) {
@@ -647,13 +647,61 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
         }
         return div;
       });
-      
+
       setDivisions(updatedDivisions);
       setNewTeamName('');
       setShowAddTeam({ ...showAddTeam, [divisionId]: false });
     } catch (error) {
       console.error('Error adding team:', error);
       alert('Failed to add team. Please try again.');
+    }
+  };
+
+  const deleteDivision = async (divisionId) => {
+    if (!window.confirm('Are you sure you want to delete this division and all its teams?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/divisions/${divisionId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+
+      // Remove division from local state
+      setDivisions(divisions.filter(div => div.id !== divisionId));
+    } catch (error) {
+      console.error('Error deleting division:', error);
+      alert('Failed to delete division. Please try again.');
+    }
+  };
+
+  const deleteTeam = async (teamId) => {
+    if (!window.confirm('Are you sure you want to delete this team?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/teams/${teamId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+
+      // Remove team from local state
+      const updatedDivisions = divisions.map(div => ({
+        ...div,
+        teams: div.teams ? div.teams.filter(team => team.id !== teamId) : []
+      }));
+      setDivisions(updatedDivisions);
+    } catch (error) {
+      console.error('Error deleting team:', error);
+      alert('Failed to delete team. Please try again.');
     }
   };
 
@@ -997,8 +1045,36 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
             return (
               <Accordion.Item eventKey={String(index)} key={division.id}>
                 <Accordion.Header>
-                  <span className={`me-2 text-${statusColorMap[divisionColor]}`}>●</span>
-                  {division.name}
+                  <div className="d-flex justify-content-between align-items-center w-100">
+                    <div>
+                      <span className={`me-2 text-${statusColorMap[divisionColor]}`}>●</span>
+                      <span
+                        className="text-primary"
+                        style={{ cursor: 'pointer', textDecoration: 'underline' }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onDivisionClick) {
+                            onDivisionClick(division);
+                            handleClose();
+                          }
+                        }}
+                        title="Click to see exercises for this division"
+                      >
+                        {division.name}
+                      </span>
+                    </div>
+                    <Button
+                      variant="outline-danger"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteDivision(division.id);
+                      }}
+                      title="Delete division and all its teams"
+                    >
+                      Delete
+                    </Button>
+                  </div>
                 </Accordion.Header>
                 <Accordion.Body>
                   {/* Learning Objectives Section */}
@@ -1089,27 +1165,52 @@ const ExerciseModal = ({ show, handleClose, exercise }) => {
                     return (
                       <div key={team.id} className="mb-4 p-3 border rounded">
                         <div className="d-flex justify-content-between align-items-center mb-3">
-                          <h5>{team.name}</h5>
-                          {!isEditing ? (
-                            <Button 
-                              variant="outline-primary" 
-                              size="sm"
-                              onClick={() => startEditing(team)}
+                          <h5>
+                            <span
+                              className="text-primary"
+                              style={{ cursor: 'pointer', textDecoration: 'underline' }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (onTeamClick) {
+                                  onTeamClick(team, division.name);
+                                  handleClose();
+                                }
+                              }}
+                              title="Click to see exercises for this team"
                             >
-                              Edit
-                            </Button>
+                              {team.name}
+                            </span>
+                          </h5>
+                          {!isEditing ? (
+                            <div className="d-flex gap-2">
+                              <Button
+                                variant="outline-primary"
+                                size="sm"
+                                onClick={() => startEditing(team)}
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                variant="outline-danger"
+                                size="sm"
+                                onClick={() => deleteTeam(team.id)}
+                                title="Delete team"
+                              >
+                                Delete
+                              </Button>
+                            </div>
                           ) : (
                             <div>
-                              <Button 
-                                variant="success" 
+                              <Button
+                                variant="success"
                                 size="sm"
                                 className="me-2"
                                 onClick={() => saveTeam(division.id, team.id)}
                               >
                                 Save
                               </Button>
-                              <Button 
-                                variant="secondary" 
+                              <Button
+                                variant="secondary"
                                 size="sm"
                                 onClick={cancelEditing}
                               >

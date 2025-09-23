@@ -37,8 +37,10 @@ func main() {
 	r.Get("/api/divisions", handlers.GetDivisionsForExercise)
 	r.Post("/api/divisions", handlers.CreateDivision)
 	r.Put("/api/divisions/update", handlers.UpdateDivision)
+	r.Delete("/api/divisions/{id}", handlers.DeleteDivision)
 	r.Post("/api/teams", handlers.CreateTeam)
 	r.Put("/api/team/update", handlers.UpdateTeam)
+	r.Delete("/api/teams/{id}", handlers.DeleteTeam)
 
 	// Event endpoints
 	r.Get("/api/events", handlers.GetEvents)

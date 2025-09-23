@@ -14,9 +14,37 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// GetExercises returns all exercises from the repository.
+// GetExercises returns all exercises from the repository, with optional filtering by division_id or team_id.
 func GetExercises(w http.ResponseWriter, r *http.Request) {
-	exercises := repository.GetAllExercises()
+	divisionIDStr := r.URL.Query().Get("division_id")
+	teamIDStr := r.URL.Query().Get("team_id")
+	divisionNameStr := r.URL.Query().Get("division_name")
+	teamNameStr := r.URL.Query().Get("team_name")
+
+	var exercises []models.Exercise
+
+	if divisionIDStr != "" {
+		divisionID, err := strconv.Atoi(divisionIDStr)
+		if err != nil {
+			http.Error(w, "Invalid division ID", http.StatusBadRequest)
+			return
+		}
+		exercises = repository.GetExercisesByDivisionID(divisionID)
+	} else if teamIDStr != "" {
+		teamID, err := strconv.Atoi(teamIDStr)
+		if err != nil {
+			http.Error(w, "Invalid team ID", http.StatusBadRequest)
+			return
+		}
+		exercises = repository.GetExercisesByTeamID(teamID)
+	} else if divisionNameStr != "" {
+		exercises = repository.GetExercisesByDivisionName(divisionNameStr)
+	} else if teamNameStr != "" {
+		exercises = repository.GetExercisesByTeamName(teamNameStr)
+	} else {
+		exercises = repository.GetAllExercises()
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(exercises)
 }
@@ -274,6 +302,42 @@ func UpdateTeam(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Team updated successfully"))
+}
+
+// DeleteDivision deletes a division and all its teams
+func DeleteDivision(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, "Invalid division ID", http.StatusBadRequest)
+		return
+	}
+
+	if !repository.DeleteDivision(id) {
+		http.Error(w, "Division not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// DeleteTeam deletes a specific team
+func DeleteTeam(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, "Invalid team ID", http.StatusBadRequest)
+		return
+	}
+
+	if !repository.DeleteTeam(id) {
+		http.Error(w, "Team not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // ChatbotHandler processes natural language commands for the chatbot.

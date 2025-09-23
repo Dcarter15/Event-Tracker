@@ -121,3 +121,57 @@ func DeleteEvent(id int) bool {
 	}
 	return repo.DeleteEventDB(id)
 }
+
+// GetExercisesByDivisionID returns exercises that contain the specified division
+func GetExercisesByDivisionID(divisionID int) []models.Exercise {
+	if repo == nil {
+		log.Println("Repository not initialized")
+		return []models.Exercise{}
+	}
+	return repo.GetExercisesByDivisionIDDB(divisionID)
+}
+
+// GetExercisesByTeamID returns exercises that contain the specified team
+func GetExercisesByTeamID(teamID int) []models.Exercise {
+	if repo == nil {
+		log.Println("Repository not initialized")
+		return []models.Exercise{}
+	}
+	return repo.GetExercisesByTeamIDDB(teamID)
+}
+
+// DeleteDivision removes a division and all its teams by ID
+func DeleteDivision(id int) bool {
+	if repo == nil {
+		log.Println("Repository not initialized")
+		return false
+	}
+	return repo.DeleteDivisionDB(id)
+}
+
+// DeleteTeam removes a team by ID
+func DeleteTeam(id int) bool {
+	if repo == nil {
+		log.Println("Repository not initialized")
+		return false
+	}
+	return repo.DeleteTeamDB(id)
+}
+
+// GetExercisesByDivisionName returns exercises that contain a division with the specified name
+func GetExercisesByDivisionName(divisionName string) []models.Exercise {
+	if repo == nil {
+		log.Println("Repository not initialized, returning empty list")
+		return []models.Exercise{}
+	}
+	return repo.GetExercisesByDivisionNameDB(divisionName)
+}
+
+// GetExercisesByTeamName returns exercises that contain a team with the specified name
+func GetExercisesByTeamName(teamName string) []models.Exercise {
+	if repo == nil {
+		log.Println("Repository not initialized, returning empty list")
+		return []models.Exercise{}
+	}
+	return repo.GetExercisesByTeamNameDB(teamName)
+}
