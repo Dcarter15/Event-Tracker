@@ -1048,20 +1048,7 @@ const ExerciseModal = ({ show, handleClose, exercise, onDivisionClick, onTeamCli
                   <div className="d-flex justify-content-between align-items-center w-100">
                     <div>
                       <span className={`me-2 text-${statusColorMap[divisionColor]}`}>●</span>
-                      <span
-                        className="text-primary"
-                        style={{ cursor: 'pointer', textDecoration: 'underline' }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (onDivisionClick) {
-                            onDivisionClick(division);
-                            handleClose();
-                          }
-                        }}
-                        title="Click to see exercises for this division"
-                      >
-                        {division.name}
-                      </span>
+                      <span>{division.name}</span>
                     </div>
                     <Button
                       variant="outline-danger"
